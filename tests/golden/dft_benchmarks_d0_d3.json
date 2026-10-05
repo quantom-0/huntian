@@ -1,0 +1,18 @@
+{
+ "AlN": {
+  "C13_GPa_rel_err": 0.027778,
+  "C33_GPa_rel_err": 0.018767,
+  "Eg_eV_rel_err": 0.030645,
+  "a_lattice_A_rel_err": 0.000321,
+  "c_lattice_A_rel_err": 0.000602,
+  "p_sp_C_m2_rel_err": 0.0
+ },
+ "GaN": {
+  "C13_GPa_rel_err": 0.0,
+  "C33_GPa_rel_err": 0.017284,
+  "Eg_eV_rel_err": 0.008772,
+  "a_lattice_A_rel_err": 0.003449,
+  "c_lattice_A_rel_err": 0.003279,
+  "p_sp_C_m2_rel_err": 0.0
+ }
+}

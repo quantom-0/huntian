@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nemotcad"
+version = "0.1.0"
+description = "Lightweight, modular TCAD core for GaN RF HEMTs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["tcad", "gan", "hemt", "rf", "device-modeling", "plugin"]
+classifiers = [
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+# The core is intentionally dependency-free so it runs on a bare interpreter.
+dependencies = []
+
+[project.optional-dependencies]
+# The self-consistent Schroedinger-Poisson plugin needs NumPy. The core, and
+# every other bundled plugin, does not.
+sp1d = ["numpy>=1.24"]
+# YAML Deck support. JSON works everywhere; YAML is a convenience.
+yaml = ["PyYAML>=6.0"]
+# Development extras. The bundled suite runs on stdlib unittest alone.
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+nemo = "nemo.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "python" }
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.setuptools.package-data]
+nemo = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["python"]

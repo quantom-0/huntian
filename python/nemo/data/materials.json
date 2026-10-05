@@ -1,0 +1,107 @@
+{
+  "version": "0.1.0",
+  "provenance": {
+    "primary_source": "Ambacher et al., J. Appl. Phys. 87, 334 (2000); Ambacher et al., J. Appl. Phys. 92, 3202 (2002); Vurgaftman & Meyer, J. Appl. Phys. 94, 3675 (2003)",
+    "verification_status": "unverified",
+    "verification_note": "Constants are transcribed from the cited literature but have NOT been independently validated against an L2 benchmark. Treat every value here as a default pending verification, and prefer the value your own Hall / XRD / CV data supports. Where the literature disagrees, the alternative is noted in 'notes'.",
+    "units": {
+      "a_lattice_A": "angstrom",
+      "c_lattice_A": "angstrom",
+      "p_sp_C_m2": "C/m^2",
+      "e31_C_m2": "C/m^2",
+      "e33_C_m2": "C/m^2",
+      "C13_GPa": "GPa",
+      "C33_GPa": "GPa",
+      "eps_r": "dimensionless (static relative permittivity)",
+      "m_eff": "dimensionless (electron effective mass / m0)",
+      "Eg_eV": "eV",
+      "thermal_conductivity_W_mK": "W/(m*K)",
+      "thermal_exponent": "dimensionless (kappa ~ T^-n)"
+    }
+  },
+  "alloys": {
+    "AlGaN": {
+      "endpoints": ["GaN", "AlN"],
+      "bowing": {
+        "p_sp_C_m2": 0.021,
+        "Eg_eV": 1.0
+      },
+      "notes": "x is the AlN mole fraction. Bowing terms follow Ambacher 2000/2002."
+    }
+  },
+  "materials": {
+    "GaN": {
+      "source": "Ambacher 2000/2002; Vurgaftman & Meyer 2003",
+      "verification": "unverified",
+      "notes": "Wurtzite GaN. p_sp is the c-axis spontaneous polarization.",
+      "tags": ["iii-nitride", "channel"],
+      "props": {
+        "a_lattice_A": 3.189,
+        "c_lattice_A": 5.185,
+        "p_sp_C_m2": -0.034,
+        "e31_C_m2": -0.49,
+        "e33_C_m2": 0.73,
+        "C13_GPa": 103.0,
+        "C33_GPa": 405.0,
+        "eps_r": 9.5,
+        "m_eff": 0.20,
+        "Eg_eV": 3.42,
+        "thermal_conductivity_W_mK": 130.0,
+        "thermal_exponent": 1.4
+      }
+    },
+    "AlN": {
+      "source": "Ambacher 2000/2002; Vurgaftman & Meyer 2003",
+      "verification": "unverified",
+      "notes": "Wurtzite AlN. eps_r is quoted between 8.5 and 9.5 in the literature.",
+      "tags": ["iii-nitride", "barrier"],
+      "props": {
+        "a_lattice_A": 3.112,
+        "c_lattice_A": 4.982,
+        "p_sp_C_m2": -0.090,
+        "e31_C_m2": -0.60,
+        "e33_C_m2": 1.46,
+        "C13_GPa": 108.0,
+        "C33_GPa": 373.0,
+        "eps_r": 8.5,
+        "m_eff": 0.30,
+        "Eg_eV": 6.13,
+        "thermal_conductivity_W_mK": 285.0,
+        "thermal_exponent": 1.4
+      }
+    },
+    "SiC-4H": {
+      "source": "Vurgaftman & Meyer 2003; common substrate data",
+      "verification": "unverified",
+      "notes": "Semi-insulating 4H-SiC, the usual RF HEMT substrate.",
+      "tags": ["substrate"],
+      "props": {
+        "eps_r": 9.7,
+        "thermal_conductivity_W_mK": 370.0,
+        "thermal_exponent": 1.3
+      }
+    },
+    "Si": {
+      "source": "Common substrate data",
+      "verification": "unverified",
+      "notes": "Silicon substrate, used for cost-driven GaN-on-Si RF parts.",
+      "tags": ["substrate"],
+      "props": {
+        "eps_r": 11.7,
+        "thermal_conductivity_W_mK": 148.0,
+        "thermal_exponent": 1.3
+      }
+    },
+    "SiN": {
+      "source": "Common passivation data",
+      "verification": "unverified",
+      "notes": "PECVD silicon nitride passivation layer.",
+      "tags": ["dielectric", "passivation"],
+      "props": {
+        "eps_r": 7.0,
+        "thermal_conductivity_W_mK": 2.0,
+        "thermal_exponent": 0.0
+      }
+    }
+  }
+}

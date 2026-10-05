@@ -1,0 +1,77 @@
+# The same campaign as demo_hemt.json, in YAML.
+#
+# YAML support is optional: if PyYAML is not installed, load this file with
+# `nemo.deck.loads_deck(text, fmt="yaml")` only after installing it, or convert
+# it to JSON. The JSON deck is the one that always runs.
+schema_version: "1.0"
+name: demo_algan_gan_hemt
+
+device:
+  name: demo_hemt_20nm_barrier
+  substrate: SiC-4H
+  layers:
+    - name: barrier
+      material: AlGaN
+      role: barrier
+      thickness_nm: 20.0
+      x_al: 0.25
+    - name: channel
+      material: GaN
+      role: channel
+      thickness_nm: 100.0
+    - name: buffer
+      material: GaN
+      role: buffer
+      thickness_nm: 1500.0
+      doping_kind: acceptor
+      doping_cm3: 1.0e+17
+  gate:
+    length_um: 0.15
+    kind: schottky
+    barrier_eV: 0.94
+  geometry:
+    gate_width_um: 100.0
+    source_gate_spacing_um: 0.6
+    gate_drain_spacing_um: 1.8
+    fingers: 1
+
+physics:
+  polarization:
+    module: physics.polarization.ambacher
+    version: ">=0.1,<1.0"
+    params:
+      screening: 0.8
+      relaxed_fraction: 1.0
+  quantum:
+    module: physics.quantum.analytic_tw
+    version: "^0.1.0"
+    params:
+      delta_ec_ratio: 0.7
+
+modules:
+  mesh:
+    module: mesh.structured2d
+    version: "*"
+    params:
+      nx: 41
+      target_spacing_nm: 1.0
+  extractors:
+    - module: extract.fom
+      params:
+        vth_correction_V: 0.0
+
+simulation:
+  temperature_K: 300.0
+  sweep:
+    kind: iv
+    vgs: [-6.0, 2.0]
+    vds: [0.0, 20.0]
+    vgs_points: 21
+    vds_points: 11
+  output:
+    - ns
+    - results.fom
+
+run:
+  notes: "Bundled demo deck in YAML form."
+  tags: [demo, algan-gan, sic]

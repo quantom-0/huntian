@@ -1,0 +1,55 @@
+{
+ "version": "1.0.0",
+ "provenance": {
+  "primary_source": "Compiled from published first-principles (DFT) literature for wurtzite GaN and AlN; per-value citations in each entry. NOT computed in-house - this table is the phase-1 stand-in until backend='qe_local' can regenerate it.",
+  "verification_status": "partially-verified",
+  "compiled": "2026-10",
+  "honesty_note": "Entries carry no two-point convergence records (per-paper settings are heterogeneous and mostly unpublished in extractable form), so every entry is flagged converged=false and adopted only under an explicit override_policy opt-in. Uncertainty bounds span the published calculation spread, which acts as a literature convergence proxy, not a substitute for one."
+ },
+ "numerics": {
+  "functional": "hse06",
+  "pseudopotential_family": "SSSP/PBEsol/efficiency@1.3.0",
+  "ecut_wfc_ry": 60.0,
+  "kspacing_1_A": 0.20,
+  "sqs_seed": 1,
+  "spin_orbit": false
+ },
+ "materials": {
+  "GaN": {
+   "source": "HSE/PBE plane-wave DFT, wurtzite GaN: PRB 99, 035201 (2019) Table I (PBE a=3.217 c=5.242 Eg=1.72; HSE a=3.178 c=5.168 Eg=3.45); elastic cluster from Wright-review theory and first-principles studies (C13 99-106, C33 372-405 GPa); e31/e33 Bernardini & Fiorentini first principles; p_sp Berry-phase DFT Bernardini 2001 (-0.029) with revised value -0.034 (Vurgaftman 2003 recommended; Dreyer 2016)",
+   "verification": "partially-verified",
+   "convergence": null,
+   "notes": "HSE lattice constants adopted (PBE overestimates a by ~0.9%, c by ~1.1%). Band gap is HSE06@alpha=0.25; PBE raw gap recorded under dft_eg_uncorrected_eV and never adopted. p_sp spread covers original vs revised Berry-phase calculations.",
+   "values": {
+    "a_lattice_A": {"value": 3.178, "lo": 3.176, "hi": 3.194, "kind": "systematic", "functional": "hse06", "source": "PRB 99, 035201 (2019), HSE; exp 3.189"},
+    "c_lattice_A": {"value": 5.168, "lo": 5.168, "hi": 5.206, "kind": "systematic", "functional": "hse06", "source": "PRB 99, 035201 (2019), HSE; exp 5.185"},
+    "C13_GPa": {"value": 103.0, "lo": 99.0, "hi": 106.0, "kind": "literature", "functional": "pbe", "source": "first-principles cluster + Wright review; exp 103-106"},
+    "C33_GPa": {"value": 398.0, "lo": 372.0, "hi": 405.0, "kind": "literature", "functional": "pbe", "source": "first-principles cluster 372-405; Wright theory 398; exp 398-405"},
+    "e31_C_m2": {"value": -0.49, "lo": -0.60, "hi": -0.32, "kind": "literature", "functional": "pbe", "source": "Bernardini & Fiorentini first principles (-0.49); Shimada (-0.32)"},
+    "e33_C_m2": {"value": 0.73, "lo": 0.63, "hi": 0.73, "kind": "literature", "functional": "pbe", "source": "Bernardini & Fiorentini first principles (0.73); Shimada (0.63)"},
+    "p_sp_C_m2": {"value": -0.034, "lo": -0.037, "hi": -0.029, "kind": "systematic", "functional": "pbe", "source": "Berry-phase DFT: Bernardini 2001 (-0.029); revised -0.034 (Vurgaftman 2003; Dreyer 2016)"},
+    "m_eff": {"value": 0.20, "lo": 0.18, "hi": 0.23, "kind": "literature", "functional": "hse06", "source": "DFT k.p extraction + experiment cluster"},
+    "Eg_eV": {"value": 3.45, "lo": 3.15, "hi": 3.51, "kind": "systematic", "functional": "hse06", "source": "HSE06 spread: PRB 99, 035201 (3.45); Schenk (3.24); JARVIS (3.15); exp 3.42-3.51", "note": "HSE06@alpha=0.25 spread across published calculations"},
+    "dft_eg_uncorrected_eV": {"value": 1.72, "lo": 1.71, "hi": 1.86, "kind": "systematic", "functional": "pbe", "source": "PRB 99, 035201 (1.72); other PBE 1.71-1.86"}
+   }
+  },
+  "AlN": {
+   "source": "HSE/PBE plane-wave DFT, wurtzite AlN: PRB 99, 035201 (2019) Table I (PBE a=3.126 c=5.010 Eg=4.07; HSE/PBEsol a=3.111 c=4.979); elastic first-principles cluster (C13 96-112, C33 355-402 GPa) with Wright-recommended 108/373; e31/e33 Bernardini & Fiorentini; p_sp Berry-phase DFT Bernardini 2001 (-0.081) with revised -0.090 (Vurgaftman 2003; rigorous calculations span -0.09 to -0.12)",
+   "verification": "partially-verified",
+   "convergence": null,
+   "notes": "HSE lattice adopted. Band gap is HSE06@alpha=0.25, which underestimates wide-gap nitrides; G0W0 upper bound 6.35 eV included in the uncertainty. p_sp value is the Vurgaftman-recommended revised Berry-phase result.",
+   "values": {
+    "a_lattice_A": {"value": 3.111, "lo": 3.102, "hi": 3.126, "kind": "systematic", "functional": "hse06", "source": "PRB 99, 035201 (2019), HSE/PBEsol; exp 3.110-3.112"},
+    "c_lattice_A": {"value": 4.979, "lo": 4.971, "hi": 5.010, "kind": "systematic", "functional": "hse06", "source": "PRB 99, 035201 (2019), HSE/PBEsol; exp 4.982"},
+    "C13_GPa": {"value": 105.0, "lo": 96.0, "hi": 112.0, "kind": "literature", "functional": "pbe", "source": "first-principles cluster 96-112; Wright recommended 108; exp 108"},
+    "C33_GPa": {"value": 380.0, "lo": 355.0, "hi": 402.0, "kind": "literature", "functional": "pbe", "source": "first-principles cluster 355-402; Wright recommended 373; exp 373-395"},
+    "e31_C_m2": {"value": -0.60, "lo": -0.60, "hi": -0.58, "kind": "literature", "functional": "pbe", "source": "Bernardini & Fiorentini first principles (-0.60)"},
+    "e33_C_m2": {"value": 1.46, "lo": 1.46, "hi": 1.50, "kind": "literature", "functional": "pbe", "source": "Bernardini & Fiorentini first principles (1.46)"},
+    "p_sp_C_m2": {"value": -0.090, "lo": -0.10, "hi": -0.081, "kind": "systematic", "functional": "pbe", "source": "Berry-phase DFT: Bernardini 2001 (-0.081); revised -0.090 (Vurgaftman 2003); rigorous span -0.09 to -0.12"},
+    "m_eff": {"value": 0.30, "lo": 0.25, "hi": 0.35, "kind": "literature", "functional": "hse06", "source": "DFT k.p extraction cluster; Vurgaftman 0.25-0.32"},
+    "Eg_eV": {"value": 6.01, "lo": 5.49, "hi": 6.35, "kind": "systematic", "functional": "hse06", "source": "HSE06: PMC8209209 (6.01), Schenk (5.64), JARVIS (5.49); G0W0 5.99-6.35; exp 6.2", "note": "HSE06@alpha=0.25 underestimates wide-gap nitrides; G0W0 upper bound in hi"},
+    "dft_eg_uncorrected_eV": {"value": 4.07, "lo": 4.06, "hi": 4.13, "kind": "systematic", "functional": "pbe", "source": "PRB 99, 035201 (4.07); other PBE 4.06-4.13"}
+   }
+  }
+ }
+}

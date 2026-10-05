@@ -1,0 +1,128 @@
+{
+ "schema_version": "1.0",
+ "name": "demo_algan_gan_hemt_dft",
+ "device": {
+  "name": "demo_hemt_20nm_barrier",
+  "substrate": "SiC-4H",
+  "layers": [
+   {
+    "name": "barrier",
+    "material": "AlGaN",
+    "role": "barrier",
+    "thickness_nm": 20.0,
+    "x_al": 0.25
+   },
+   {
+    "name": "channel",
+    "material": "GaN",
+    "role": "channel",
+    "thickness_nm": 100.0
+   },
+   {
+    "name": "buffer",
+    "material": "GaN",
+    "role": "buffer",
+    "thickness_nm": 1500.0,
+    "doping_kind": "acceptor",
+    "doping_cm3": 1e+17
+   }
+  ],
+  "gate": {
+   "length_um": 0.15,
+   "kind": "schottky",
+   "barrier_eV": 0.94
+  },
+  "geometry": {
+   "gate_width_um": 100.0,
+   "source_gate_spacing_um": 0.6,
+   "gate_drain_spacing_um": 1.8,
+   "fingers": 1
+  }
+ },
+ "physics": {
+  "polarization": {
+   "module": "physics.polarization.ambacher",
+   "version": ">=0.1,<1.0",
+   "params": {
+    "screening": 0.8,
+    "relaxed_fraction": 1.0
+   }
+  },
+  "quantum": {
+   "module": "physics.quantum.sp1d",
+   "version": "^1.0.0",
+   "params": {
+    "algorithm": "newton",
+    "delta_ec_ratio": 0.7,
+    "h_fine_nm": 0.1,
+    "fine_width_nm": 12.0
+   }
+  }
+ },
+ "modules": {
+  "materials": {
+   "module": "materials.dft",
+   "version": "^0.1.0",
+   "params": {
+    "backend": "table",
+    "eg_policy": "reject_pbe"
+   }
+  },
+  "mesh": {
+   "module": "mesh.structured2d",
+   "version": "*",
+   "params": {
+    "nx": 41,
+    "target_spacing_nm": 1.0
+   }
+  },
+  "nonlinear": {
+   "module": "nonlinear.newton",
+   "version": "^1.0.0",
+   "params": {
+    "max_iterations": 40,
+    "line_search": true,
+    "armijo": 0.0001
+   }
+  },
+  "extractors": [
+   {
+    "module": "extract.fom",
+    "params": {
+     "vth_correction_V": 0.0
+    }
+   }
+  ]
+ },
+ "simulation": {
+  "temperature_K": 300.0,
+  "sweep": {
+   "kind": "iv",
+   "vgs": [
+    -6.0,
+    2.0
+   ],
+   "vds": [
+    0.0,
+    20.0
+   ],
+   "vgs_points": 21,
+   "vds_points": 11
+  },
+  "output": [
+   "ns",
+   "results.fom"
+  ]
+ },
+ "run": {
+  "notes": "Same device as demo_hemt_sp1d.json. The materials slot is bound to materials.dft (backend=table, eg_policy=reject_pbe): the DFT lookup table overrides GaN/AlN constants, polarization.ambacher and physics.quantum.sp1d run untouched, and dft_provenance carries the full override audit trail. Run from the repository root so the default table_path (data/dft_lookup/algan_gan.json) resolves.",
+  "tags": [
+   "demo",
+   "algan-gan",
+   "sic",
+   "sp1d",
+   "newton",
+   "dft"
+  ]
+ }
+}

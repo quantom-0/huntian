@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0",
+  "name": "demo_algan_gan_hemt_dd",
+  "device": {
+    "name": "demo_hemt_20nm_barrier",
+    "substrate": "SiC-4H",
+    "layers": [
+      {
+        "name": "barrier",
+        "material": "AlGaN",
+        "role": "barrier",
+        "thickness_nm": 20.0,
+        "x_al": 0.25
+      },
+      {
+        "name": "channel",
+        "material": "GaN",
+        "role": "channel",
+        "thickness_nm": 100.0
+      },
+      {
+        "name": "buffer",
+        "material": "GaN",
+        "role": "buffer",
+        "thickness_nm": 1500.0,
+        "doping_kind": "acceptor",
+        "doping_cm3": 1e17
+      }
+    ],
+    "gate": {
+      "length_um": 0.15,
+      "kind": "schottky",
+      "barrier_eV": 0.94
+    },
+    "geometry": {
+      "gate_width_um": 100.0,
+      "source_gate_spacing_um": 0.6,
+      "gate_drain_spacing_um": 1.8,
+      "fingers": 1
+    }
+  },
+  "physics": {
+    "polarization": {
+      "module": "physics.polarization.ambacher",
+      "version": ">=0.1,<1.0",
+      "params": {
+        "screening": 0.8,
+        "relaxed_fraction": 1.0
+      }
+    },
+    "transport": {
+      "module": "transport.dd",
+      "version": "^0.1.0",
+      "params": {
+        "vds_sweep_V": "0.0,0.25,0.5,0.75,1.0",
+        "vgs_sweep_V": "-2.0,0.0",
+        "temperature_K": 300.0,
+        "mu0_cm2_Vs": 1500.0,
+        "statistics": "boltzmann",
+        "max_step_V": 0.05,
+        "max_newton_iterations": 200,
+        "newton_tolerance": 1e-09,
+        "ptc_enabled": true,
+        "require_continuity": true,
+        "continuity_tol": 1e-06,
+        "max_continuity_error": 0.0001
+      }
+    }
+  },
+  "modules": {
+    "mesh": {
+      "module": "mesh.structured2d",
+      "version": "*",
+      "params": {
+        "nx": 21,
+        "target_spacing_nm": 5.0,
+        "min_nodes_per_layer": 5
+      }
+    },
+    "linear": {
+      "module": "linear.blocktridiag",
+      "version": "^0.1.0",
+      "params": {
+        "regularization": 1e-14
+      }
+    }
+  },
+  "simulation": {
+    "temperature_K": 300.0,
+    "sweep": {
+      "kind": "iv",
+      "vgs": [-2.0, 0.0],
+      "vds": [0.0, 1.0],
+      "vgs_points": 2,
+      "vds_points": 5
+    },
+    "output": ["electrostatics", "carriers", "current", "iv", "ns"]
+  },
+  "run": {
+    "notes": "Same device as demo_hemt.json, solved with the drift-diffusion transport stage instead of the quantum one. The 'linear' slot is bound to the block tridiagonal solver, because the deployment target has NumPy but not SciPy; the transport stage resolves it through the service registry and refuses to run if it is missing. The sweep lives in the module parameters (the deck's simulation.sweep block is declarative, as in the other demo decks), and max_step_V makes the stage walk to each requested drain bias in 0.05 V internal steps: a cold jump of several volts stalls the line search, and with the field-dependent mobility on (Caughey-Thomas, vsat_cm_s) the last point needs the finer ladder - 0.1 V steps converge everywhere except Vds = 1 V at Vgs = 0, 0.05 V steps converge at all ten points with terminal-current continuity of 1e-12 or better. The mesh is uniform at 5 nm, so the barrier/channel interface is smeared over one cell (deviation 4 in the module docstring).",
+    "tags": ["demo", "algan-gan", "sic", "transport", "drift-diffusion", "iv"]
+  }
+}
