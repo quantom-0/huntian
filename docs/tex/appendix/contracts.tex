@@ -1,0 +1,142 @@
+% 附录 C —— 版本、指纹与 artifact 键矩阵
+
+\chapter{版本、指纹与 artifact 键矩阵}
+\label{app:contracts}
+
+\section{模块版本记录}
+
+{\small
+\begin{longtable}{@{}p{0.055\textwidth} p{0.26\textwidth} p{0.085\textwidth} p{0.50\textwidth}@{}}
+\toprule
+\textbf{章} & \textbf{模块标识} & \textbf{版本} & \textbf{版本语义说明}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{章} & \textbf{模块标识} & \textbf{版本} & \textbf{版本语义说明}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+6 & \pid{mesh.structured2d} & 0.1.0 & 首个版本；横向栅边缘加密列为后续计划\\
+7 & \pid{materials.dft} & 0.1.0 & 首个版本；\akey{table} 后端已落地，\akey{qe_*} 未实现\\
+8 & \pid{physics.polarization.ambacher} & 0.1.0 & 首个版本；仅 Ga 面极性\\
+9 & \pid{physics.quantum.analytic_tw} & 0.1.0 & 首个版本；作为基线保留\\
+10 & \pid{physics.quantum.sp1d} & \textbf{1.1.1} &
+  1.1.0 $\to$ 1.1.1：Jacobian 做到严格精确（全谱波函数响应 + 质量响应），
+  数值行为改变，\emph{因此必须升版本}\\
+11 & \pid{transport.dd} & 0.1.0 & 首个版本；收尾时补齐场依赖迁移率\\
+12 & \pid{extract.fom} & 0.1.0 & 首个版本；占位实现（\texttt{unverified}）\\
+13 & \pid{nonlinear.newton} & 1.0.0 & 首个稳定版本\\
+14 & \pid{linear.blocktridiag} & 0.1.0 & 首个版本；替代设计稿中的 SciPy 稀疏步\\
+\end{longtable}
+}
+
+\noindent
+表中第 10 章一行是版本语义的一个实例：\textbf{数值行为改变必须升版本}，
+因为指纹不捕获数值（见 \crefchap{ch:architecture}）。
+
+\section{指纹记录}
+
+\begin{veriftable}{已知的指纹值与语义}{tab:appC-fingerprints}
+\vrow{解析量子 Deck（\fpath{demo_hemt_sp1d.json} 之前的身形）}{
+  两次运行一致}{\texttt{bcfbb07632737b44}}
+\vrow{自洽量子 Deck（\fpath{demo_hemt_sp1d.json}）}{
+  两次运行一致}{\texttt{9d716641ad967853}}
+\vrow{同一 Deck 两次运行}{相等}{通过}
+\vrow{两个不同实现的 Deck}{不等}{通过}
+\vrow{材料槽替换后的 Deck}{不等}{通过（\crefchap{ch:dft}）}
+\vnote{指纹的组成是"参数 + 模块版本 + 材料库指纹 + 标记"。
+      \textbf{artifact 数值不进指纹}，因此上表第二行与第一行的差异
+      并不是"数值变了"这一事实本身，而是模块版本从 1.1.0 升到 1.1.1
+      的结果。这条语义在第 \ref{ch:architecture} 章有完整说明。}
+\end{veriftable}
+
+\section{artifact 键与单位矩阵}
+
+本附录与 \creftab{tab:data-matrix}（契约矩阵：谁产谁用）互补 ——
+这里给出\emph{每个键的单位}，因为跨模块最常见的误解就是单位。
+
+{\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}p{0.23\textwidth} p{0.275\textwidth} p{0.12\textwidth} p{0.275\textwidth}@{}}
+\toprule
+\textbf{artifact} & \textbf{键} & \textbf{单位} & \textbf{说明}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{artifact} & \textbf{键} & \textbf{单位} & \textbf{说明}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\akey{structure} & \akey{layers[].thickness_nm} & \U{nm} & 层厚\\
+ & \akey{layers[].x_al} & --- & AlN 摩尔分数，$\in[0,1]$\\
+ & \akey{layers[].doping_cm3} & \U{cm^{-3}} & 净掺杂浓度\\
+ & \akey{gate.length_um} & \U{\mu m} & 栅长\\
+\midrule
+\akey{mesh} & \akey{x_nm[]}, \akey{z_nm[]} & \U{nm} & 两个一维轴\\
+ & \akey{interfaces_nm[]} & \U{nm} & 层界坐标（落在节点上）\\
+ & \akey{vertical_spacing_nm} & \U{nm} & 竖直间距极值（\akey{{min,max}} 两个子键）\\
+ & \akey{contacts_nm.*} & \U{nm} & 源/栅/漏接触位置\\
+ & \akey{layers[].node_slice} & --- & 层 $\to$ 节点区间（可反查）\\
+\midrule
+\akey{materials} & \akey{a_lattice_A}, \akey{c_lattice_A} & \U{\AA} & 晶格常数\\
+ & \akey{p_sp_C_m2} & \U{C/m^2} & 自发极化\\
+ & \akey{e31_C_m2}, \akey{e33_C_m2} & \U{C/m^2} & 压电常数\\
+ & \akey{C13_GPa}, \akey{C33_GPa} & \U{GPa} & 弹性常数\\
+ & \akey{eps_r}, \akey{m_eff} & --- & 相对介电常数、有效质量比\\
+ & \akey{Eg_eV} & \U{eV} & 带隙\\
+\midrule
+\akey{polarization} & \akey{barrier_thickness_nm} & \U{nm} & 势垒厚度\\
+ & \akey{sigma_pol_C_m2}, \akey{sigma_eff_C_m2} & \U{C/m^2} & 极化 / 有效面电荷\\
+ & \akey{sigma_pol_cm2}, \akey{sigma_eff_cm2} & \U{cm^{-2}} & 同一量的电荷密度表示（除以 $q$）\\
+ & \akey{strain}, \akey{relaxed_fraction}, \akey{screening} & --- & 无量纲\\
+ & \akey{band_offset_eV} & \U{eV} & 带隙差 $\Delta E_g$（不是 $\dEc$）\\
+\midrule
+\akey{quantum} & \akey{ns_m2} & \U{m^{-2}} & 面密度\\
+ & \akey{ns_cm2} & \U{cm^{-2}} & 同一量的工程单位\\
+ & \akey{ns_upper_bound_cm2} & \U{cm^{-2}} & $\sigeff/q$\\
+ & \akey{ef_eV}, \akey{e0_eV} & \U{eV} & 费米能级、基态\\
+ & \akey{delta_ec_eV} & \U{eV} & $\dEc=r\,\Delta E_g$\\
+\akey{ns} & （标量） & \U{cm^{-2}} & 面密度的便捷通道\\
+\midrule
+\akey{electrostatics} & \akey{psi_V} & \U{V} & 二维电势场（最后偏压点）\\
+ & \akey{gate_reference_V} & \U{V} & 栅参考电位\\
+\akey{carriers} & \akey{density_m3} & \U{m^{-3}} & 二维电子密度场\\
+ & \akey{ns_cm2} & \U{cm^{-2}} & 横向平均后的面密度\\
+ & \akey{mobility_m2_Vs} & \U{m^2/(V\cdot s)} & 低场迁移率\\
+\akey{current} & \akey{id_A_per_m}, \akey{is_A_per_m} & \U{A/m} &
+  \textbf{每单位器件宽度}\\
+ & \akey{continuity_error} & --- & 相对电流不平衡\\
+\akey{iv} & \akey{vds_V[]}, \akey{vgs_V[]} & \U{V} & 偏压轴\\
+ & \akey{id_A_per_m[]} & \U{A/m} & 漏电流（每单位宽度）\\
+\midrule
+\akey{results.fom} & \akey{vth_est_V} & \U{V} & 电荷控制阈值估计\\
+ & \akey{barrier_drop_V} & \U{V} & $\sigeff d/(\epsr\epsO)$\\
+ & \akey{cox_F_m2} & \U{F/m^2} & 势垒层单位面积电容\\
+ & \akey{cox_uF_cm2} & \U{\mu F/cm^2} & 同一量的工程单位\\
+ & \akey{thermal_voltage_V} & \U{V} & $kT/q$\\
+\midrule
+\akey{dft_provenance} & \akey{numerics.*} & 混合 & 截断能（\U{Ry}）、$k$ 间距（\U{1/\AA}）等\\
+ & \akey{entries.*.uncertainty} & 混合 & 逐值区间 $[v_{\text{lo}},v_{\text{hi}}]$\\
+\end{longtable}
+}
+
+\noindent
+表中三处\textbf{同一量的双单位}（\akey{sigma_*_C_m2} 与
+\akey{sigma_*_cm2}、\akey{ns_m2} 与 \akey{ns_cm2}、
+\akey{cox_F_m2} 与 \akey{cox_uF_cm2}）是有意为之：
+国际单位制用于计算，工程单位用于报告，两者同时提供以避免
+下游各自换算。这也意味着\textbf{改动其中之一必须同时改另一个}，
+一致性由各章的验证表锁定。
+
+\section{契约的机械可校验性}
+
+本文档的契约矩阵与单位的最终真相在代码里（\texttt{MANIFEST} 与各模块的
+\texttt{ctx.put} 调用）。当前两者的一致性靠人工维护；
+把"文档里的键" 与"代码里的键"做机械比对是一件
+\emph{明确可行但尚未实现}的工程化工作，
+它与 \crefchap{ch:intro} 提到的"章首模块标识与 MANIFEST 逐字段比对"
+是同一件事。
+
+\cleardoublepage

@@ -1,0 +1,76 @@
+% =====================================================================
+%  notation.tex —— 全局符号表（唯一真源）
+%
+%  纪律：正文中出现的每一个符号必须在此登记；此表出现的每一个符号
+%        必须至少在一章中被使用。preamble/math.tex 的宏与本表一一对应。
+% =====================================================================
+
+\chapter*{符号表}
+\addcontentsline{toc}{chapter}{符号表}
+\markboth{符号表}{符号表}
+
+本表为全文符号的唯一真源。各模块章一律沿用本表定义，不得就地重新定义符号；
+若某模块确需引入新符号，须同时在本表登记。
+
+\vspace{0.5em}
+\small
+\begin{longtable}{@{}p{24mm} p{72mm} p{30mm} p{22mm}@{}}
+\toprule
+\textbf{符号} & \textbf{含义} & \textbf{单位} & \textbf{首次出现}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{符号} & \textbf{含义} & \textbf{单位} & \textbf{首次出现}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\multicolumn{4}{@{}l@{}}{\itshape 基本常数（CODATA 2018）}\\
+$q$                     & 元电荷 & \U{C} & \S\ref{sec:sp1d-model}\\
+$\kb$                   & 玻尔兹曼常数 & \U{J/K} & \S\ref{sec:sp1d-model}\\
+$\hb$                   & 约化普朗克常数 & \U{J\cdot s} & \S\ref{sec:sp1d-model}\\
+$\epsO$                 & 真空介电常数 & \U{F/m} & \S\ref{sec:sp1d-model}\\
+$\mO$                   & 自由电子质量 & \U{kg} & \S\ref{sec:sp1d-model}\\
+$\kT$                   & 热能，$T$ 为晶格温度 & \U{eV} & \S\ref{sec:sp1d-model}\\
+\midrule
+\multicolumn{4}{@{}l@{}}{\itshape 几何与网格}\\
+$z$                     & 竖直坐标，自栅极指向体内为正 & \U{m} & \S\ref{sec:sp1d-geometry}\\
+$d$                     & 势垒层厚度（金属/势垒界面到异质界面） & \U{m} & \S\ref{sec:sp1d-geometry}\\
+$L$                     & 求解域总深度（异质界面到背面） & \U{m} & \S\ref{sec:sp1d-geometry}\\
+$h_i$                   & 第 $i$ 个面两侧节点间距 & \U{m} & \S\ref{sec:sp1d-fv}\\
+$w_i$                   & 第 $i$ 个节点的有限体积控制体宽度 & \U{m} & \S\ref{sec:sp1d-fv}\\
+$c_i$                   & 面的介电系数，$c_i=\epsface_i\epsO/h_i$ & \U{F/m^2} & \S\ref{sec:sp1d-fv}\\
+\midrule
+\multicolumn{4}{@{}l@{}}{\itshape 静电与量子}\\
+$\Ec(z)$                & 导带底能量（以 $\Ef$ 为零点） & \U{eV} & \S\ref{sec:sp1d-model}\\
+$\psi_i(z)$             & 第 $i$ 个亚带的包络波函数 & \U{m^{-1/2}} & \S\ref{sec:sp1d-model}\\
+$\Ei$                   & 第 $i$ 个亚带的本征能量 & \U{eV} & \S\ref{sec:sp1d-model}\\
+$\Ef$                   & 费米能级（平衡态取为零点） & \U{eV} & \S\ref{sec:sp1d-model}\\
+$\meff(z)$              & 有效质量（沿 $z$ 方向） & \U{kg} & \S\ref{sec:sp1d-model}\\
+$m^{*}_i$               & 第 $i$ 个亚带的态密度有效质量 & \U{kg} & \S\ref{sec:sp1d-model}\\
+$g_v$                   & 导带谷简并度 & --- & \S\ref{sec:sp1d-model}\\
+$n_i$                   & 第 $i$ 个亚带的二维占据密度 & \U{m^{-2}} & \S\ref{sec:sp1d-occupation}\\
+$n(z)$                  & 体电子密度 & \U{m^{-3}} & \S\ref{sec:sp1d-occupation}\\
+$\ns$                   & 二维电子气面密度，$\ns=\sum_i n_i$ & \U{m^{-2}} & \S\ref{sec:sp1d-occupation}\\
+$\nsu$                  & 面密度上界，$\nsu=\sigeff/q$ & \U{m^{-2}} & \S\ref{sec:sp1d-occupation}\\
+$\sigeff$               & 屏蔽后的有效极化面电荷 & \U{C/m^2} & \S\ref{sec:sp1d-model}\\
+$\phib$                 & 金属/势垒界面肖特基势垒高度 & \U{eV} & \S\ref{sec:sp1d-bc}\\
+$V_g$                   & 栅极偏压 & \U{V} & \S\ref{sec:sp1d-bc}\\
+$\dEc$                  & 异质界面导带带阶 & \U{eV} & \S\ref{sec:sp1d-bc}\\
+$\epsr$                 & 相对介电常数 & --- & \S\ref{sec:sp1d-fv}\\
+\midrule
+\multicolumn{4}{@{}l@{}}{\itshape 算子与离散}\\
+$\mat{L}$               & 有限体积 Poisson 算子 & --- & \S\ref{sec:sp1d-fv}\\
+$\mat{A}$               & 对称化 BenDaniel--Duke 三对角 Hamilton 矩阵 & --- & \S\ref{sec:sp1d-bdd}\\
+$\mat{W}$               & 控制体宽度对角矩阵 & --- & \S\ref{sec:sp1d-fv}\\
+$\mat{J}$               & 耦合残差的 Jacobian & --- & \S\ref{sec:sp1d-jacobian}\\
+$\mat{R}$               & 耦合残差向量 & --- & \S\ref{sec:sp1d-jacobian}\\
+$\dg$                   & Moore--Penrose 伪逆 & --- & \S\ref{sec:sp1d-resolvent}\\
+$N$                     & 竖直网格节点数 & --- & \S\ref{sec:sp1d-fv}\\
+$\delta_{\mathrm{FD}}$  & 中心差分步长 & --- & \S\ref{sec:sp1d-verification}\\
+
+\end{longtable}
+\normalsize
+
+\cleardoublepage

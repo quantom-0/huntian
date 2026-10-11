@@ -1,0 +1,290 @@
+% 总论第 4 章 —— 验证方法学
+
+\chapter{验证方法学}
+\label{ch:verification-methodology}
+\index{1concept@概念!verification@验证}
+
+本章记述"凭什么相信这些数字"这件事本身。它不描述任何一个模块，
+而是描述九个模块章里那些验证表\emph{共同遵循的判据体系}。
+把它单列一章的理由很直接：本文档全篇出现的几百个数字，
+其可信度完全取决于本章所定义的判据是否恰当。
+
+\section{四层验证框架}
+\label{sec:verify-framework}
+
+方案把验证分为四层，本文档沿用其分类：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.24\textwidth} p{0.34\textwidth} p{0.34\textwidth}@{}}
+\toprule
+\textbf{层} & \textbf{内容} & \textbf{本文档中的体现}\\
+\midrule
+代码验证 & 收敛阶、闭式解、制造解 & 各章 §x.5 的主体\\
+解验证 & 网格收敛、容差与步长扫描 & 第 \ref{ch:sp1d}、\ref{ch:transport_dd} 章\\
+确认（Validation） & 与实测/独立实现对比 & \textbf{仅部分完成}，见下\\
+不确定度量化 & 敏感性、蒙特卡洛 & 未实现\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+第三层是本文档最弱的一环，必须明说：\textbf{基准阶梯 L0--L7 目前只走到 L1}。
+L2（Hall 对标面密度）及其后的每一级都尚未进行，因此
+"绝对数值不可信"这句话在本文档中反复出现，其根据就在这里。
+
+\begin{veriftable}{基准阶梯的当前进度}{tab:verify-ladder}
+\vrow{L0\ \ 平衡态、一维 Poisson、极化解析式}{$<10^{-6}$}{\textbf{达成}（第 \ref{ch:sp1d}、\ref{ch:polarization} 章）}
+\vrow{L1\ \ 一维 Schrödinger--Poisson 子带}{子带能量差 $<5$\U{meV}}{部分达成（无独立实现对照）}
+\vrow{L2\ \ 标准异质结 $\ns$、C--V}{$\ns$ 差 $<5\%$}{\textbf{未做}（需霍尔测量）}
+\vrow{L3\ \ 与商用 TCAD 交叉对比 IV/C--V}{$<5\%$}{未做}
+\vrow{L4\ \ 直流输出/转移特性}{$I_{d\max}/g_m<10\%$，$V_{\text{th}}<0.15$\U{V}}{未做}
+\vrow{L5\ \ S 参数 $\to f_T/f_{\max}$}{$<10$--$15\%$}{未实现（无 S 参数链）}
+\vrow{L6\ \ pulsed IV、gate/drain-lag}{坍塌幅度 $<20\%$}{未实现（无陷阱模型）}
+\vrow{L7\ \ load-pull}{$P_{\text{out}}$/PAE $<10$--$15\%$}{未实现}
+\end{veriftable}
+
+\section{五类判据}
+\label{sec:verify-criteria}
+
+本文档 §x.5 的验证表使用且只使用五类判据。每一类都有它的适用场景
+与它\emph{不能}证明的东西 —— 知道后者比知道前者更重要。
+
+\subsection{第一类：闭式解}
+\label{sec:verify-closed-form}
+\index{3method@方法!closed-form benchmark@闭式解基准}
+
+\textbf{能证明}：离散格式在这个特定问题上的精度。
+\textbf{不能证明}：格式在别的问题上也是对的。
+
+闭式解是最强的单项证据，因为它是\emph{精确}的，比较不需要容差解释。
+本文档中的典型值：
+
+\begin{veriftable}{闭式解基准的代表性结果}{tab:verify-closed}
+\vrow{双介质平行板（含界面面电荷）}{精确}{\textbf{$<10^{-10}$\U{V}}（\crefchap{ch:sp1d}）}
+\vrow{无限深方阱 $E_n=n^2\pi^2\hb^2/(2\meff L^2)$}{二阶收敛}{二阶收敛（\crefchap{ch:sp1d}）}
+\vrow{均匀电阻 $J=qN_D\mumu V/L$}{$<0.1\%$}{\textbf{$<10^{-6}$}（\crefchap{ch:transport_dd}）}
+\vrow{块三对角解对稠密解}{$<10^{-10}$}{通过（四组尺寸，\crefchap{ch:blocktridiag}）}
+\vrow{Bernoulli 函数 $B(x)=x/(\ee^x-1)$}{$10^{-12}$ 相对}{通过（\crefchap{ch:transport_dd}）}
+\end{veriftable}
+
+注意最后两行的性质差别：第一至三行检验的是\emph{离散格式}，
+第四行检验的是\emph{求解器}，第五行检验的是\emph{一个特殊函数}。
+把它们分开陈述，是因为它们失效时的含义完全不同。
+
+\subsection{第二类：收敛阶}
+\label{sec:verify-order}
+\index{3method@方法!convergence order@收敛阶}
+
+\textbf{能证明}：格式的\emph{阶}是对的 —— 这比"某个网格上误差小"
+强得多，因为它意味着加密时误差会按预期速率下降。
+\textbf{不能证明}：误差常数小。一个一阶格式可能在粗网格上比
+二阶格式更准。
+
+网格收敛阶由 Richardson 三点公式估计：
+
+\begin{equation}
+p \;=\;
+\frac{\ln\!\bigl(\abs{u_1-u_2}\,/\,\abs{u_2-u_3}\bigr)}
+     {\ln\!\bigl(h_1/h_2\bigr)},
+\qquad h_1>h_2>h_3 .
+\label{eq:verify-richardson}
+\end{equation}
+
+迭代法的\emph{局部收敛阶}由相邻三个残差估计：
+
+\begin{equation}
+p \;=\;
+\frac{\ln\!\bigl(\norm{r_{k+1}}/\norm{r_k}\bigr)}
+     {\ln\!\bigl(\norm{r_k}/\norm{r_{k-1}}\bigr)} .
+\label{eq:verify-local-order}
+\end{equation}
+
+\crefeq{eq:verify-local-order} 的使用有一个必须说明的细节：
+\textbf{只有落在渐近窗口内的三元组才有意义}。实现上取
+"残差严格下降且比值本身在缩小"的三元组，并排除最小成员已落到
+舍入地板（$\sim10^{-15}$）的样本 —— 地板以下的比值是噪声。
+本文档报告的两个关键值都取自这样的窗口：耦合 SP 的
+$p\approx1.99$（\crefchap{ch:sp1d}）与制造解的
+$2.008/2.002/2.001$（\crefchap{ch:transport_dd}）。
+
+\subsection{第三类：制造解}
+\label{sec:verify-mms}
+\index{3method@方法!method of manufactured solutions@制造解方法}
+
+\textbf{能证明}：算子在\emph{任意}已知解上的精度，而不只是在恰好有
+简单闭式解的那几个问题上。
+\textbf{不能证明}：边界条件的处理是否正确（制造解通常搭配周期性或
+简单边界）。
+
+做法是：取一个解析函数 $\psi^{\star}$，把它代入微分算子算出源项，
+再把该源项作为已知右端求解，比较数值解与 $\psi^{\star}$。
+本文档中的范例在 \crefchap{ch:transport_dd}：取
+$\psi^{\star}=\sin(\pi z/L)$（与横向无关，从而\emph{隔离}竖直算子），
+加密四档得到的观测阶为 $2.008/2.002/2.001$。
+标准表述见 \cite{roache2002,salari2000}。
+
+制造解的一个常被忽略的好处是：它使\textbf{"界面以外的格式是二阶的"}
+成为一个可断言的命题，即便界面本身只有一阶 —— 只要制造解在界面两侧
+都是光滑的。\crefchap{ch:transport_dd} 正是这样把两件事分开陈述的。
+
+\subsection{第四类：不变量与趋势}
+\label{sec:verify-invariants}
+\index{1concept@概念!invariant assertion@不变量断言}
+
+\textbf{能证明}：某个\emph{必须成立的关系}在实现中确实成立。
+\textbf{不能证明}：任何数值精度。
+
+不变量断言的价值在于\emph{耐久}：它断言的是"若把 Al 组分调高，
+极化必然增强"这类关系，而不是某个具体数字。
+因此它在参数演化后依然有效 —— 这对一个参数尚未标定的项目
+尤其重要。本文档中此类断言的例子：
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.28em,topsep=0.35em]
+  \item 平衡态通量恒为零（\crefchap{ch:transport_dd}，实测 $2.7\times10^{-15}$\U{A/m}）；
+  \item 势偏导的反对称性 $\partial J/\partial\psi_L=-\partial J/\partial\psi_R$
+        （规范不变性的离散形式）；
+  \item 密度偏导与密度无关（跨 $17$ 个数量级验证）；
+  \item 面密度低于极化上界 $\sigeff/q$；
+  \item 屏蔽因子严格按比例缩放被测到 $10^{-6}$ 位。
+\end{itemize}
+
+\subsection{第五类：负向基准}
+\label{sec:verify-negative}
+\index{1concept@概念!negative benchmark@负向基准}
+
+\textbf{能证明}：某个机制是\emph{必要}的。
+\textbf{不能证明}：它是最优的。
+
+负向基准记录的是\emph{另一个配置下的失败}。本文档中有两处：
+
+\begin{veriftable}{负向基准（记录失败，以证明机制的必要性）}{tab:verify-negative}
+\vrow{关闭线搜索后从远起点出发}{不收敛}{
+  通过（$x^3-1$ 自 $x=40$、上限 $4$ 步；\crefchap{ch:newton}）}
+\vrow{遗漏态密度质量响应时的误差地板}{不随差分步长下降}{
+  $1.3\times10^{-5}$，是"缺项"的特征（\crefchap{ch:sp1d}）}
+\vnote{第二行尤其值得注意：它记录的是一个\emph{已修正的}错误实现的症状。
+      保留它，是因为"如何识别一个缺项"这件事无法用正面例子说清。}
+\end{veriftable}
+
+\section{导数校验：一个必须写进方法学的教训}
+\label{sec:verify-jacobian}
+\index{3method@方法!Jacobian verification@Jacobian 校验}
+
+Newton 类方法的正确性几乎完全取决于 Jacobian。本文档记录了一条
+\emph{代价高昂}的教训，它的普遍性超出了本项目。
+
+\subsection{校验公式}
+
+解析 Jacobian 与中心差分比较：
+
+\begin{equation}
+\mat{J}^{\text{FD}}_{:,j} \;=\;
+\frac{\mat{R}(\bm{x}+h\bm{e}_j)-\mat{R}(\bm{x}-h\bm{e}_j)}{2h},
+\qquad h = 10^{-6}\max\!\bigl(1,\norm{\bm{x}}_\infty\bigr).
+\label{eq:verify-fd}
+\end{equation}
+
+分歧在于\textbf{如何把 $\mat{J}^{\text{FD}}_{:,j}-\mat{J}_{:,j}$ 归一化}。
+两种做法：
+
+\begin{equation}
+e_j^{\text{col}} \;=\;
+\frac{\bigl\lVert \mat{J}^{\text{FD}}_{:,j}-\mat{J}_{:,j}\bigr\rVert_\infty}
+{\max\bigl(\bigl\lVert \mat{J}^{\text{FD}}_{:,j}\bigr\rVert_\infty,\
+       \bigl\lVert \mat{J}_{:,j}\bigr\rVert_\infty\bigr)},
+\qquad
+e_i^{\text{row}} \;=\;
+\frac{\bigl\lVert \mat{J}^{\text{FD}}_{i,:}-\mat{J}_{i,:}\bigr\rVert_\infty}
+{\max\bigl(\bigl\lVert \mat{J}^{\text{FD}}_{i,:}\bigr\rVert_\infty,\
+       \bigl\lVert \mat{J}_{i,:}\bigr\rVert_\infty\bigr)} .
+\label{eq:verify-fd-norms}
+\end{equation}
+
+\subsection{为什么逐列不够}
+
+\crefchap{ch:transport_dd} 的未知量从 $(\psi,\varphi_n)$ 改为 $(\psi,n)$ 时，
+Jacobian 里残留了一行旧代码，把第二个未知量当作准费米势代进了态密度公式。
+后果是\emph{内部密度与残差相差 $17$ 个数量级}，
+连续性行因此完全失去对 $\psi$ 的耦合，整个耦合矩阵在 Newton 最需要的
+方向上近奇异。
+
+而当时的\emph{逐列}归一化校验报告相对误差只有 $10^{-10}$ ——
+因为坏掉的那一项在整列中绝对值很小，被子列中量级正常的其他项淹没了。
+改成\emph{逐行}相对判据后，它立刻暴露。
+
+\boundary{由此得到两条纪律，它们适用于任何耦合系统的实现：
+
+\textbf{（i）导数校验用逐行相对判据，不用逐列。}
+行对应"一个方程"，列对应"一个未知量"；一个方程整体错位，
+在行视角下是 $100\%$ 的错误，在列视角下可能微不足道。
+
+\textbf{（ii）校验要在单元级与沿路径做两遍。}
+"通量本身对中心差分"（单元级）与"整个 Jacobian 沿 Newton 路径
+对中心差分"（系统级）是两道独立的闸门。\crefchap{ch:transport_dd}
+两道都做了：前者逐项验四个偏导，后者沿路径验到 $\sim10^{-10}$。
+
+\textbf{（iii）一致性不等于正确性。}
+\crefchap{ch:transport_dd} 另记录了一例：Bernoulli 函数的反射恒等式
+写反之后，通量仍然\emph{完全自洽} —— 系统级 Jacobian 对中心差分
+照样通过 $4\times10^{-10}$ —— 却在每个带边沿电流方向上升的面上
+系统性错误。修好后平衡态残差从 $35$ 降到 $4.8\times10^{-6}$（七个数量级）。
+\textbf{自洽性只能排除"不自洽"，不能排除"一致地错"。}
+}
+
+\subsection{本文档中两个校验器的差异}
+
+一个值得记录的细节：\crefchap{ch:newton} 的通用校验器用的是
+\emph{逐列}归一化（\crefeq{eq:verify-fd-norms} 左式），
+而 \crefchap{ch:transport_dd} 用自己的逐行判据。
+这不是不一致，而是适用范围不同：前者的服务对象是良缩放的稠密系统，
+后者是行均衡过的耦合系统。本文档在两处都注明了这一差异，
+把它作为\emph{适用边界}而不是藏起来。
+
+\section{可复现性作为一类判据}
+\label{sec:verify-reproducibility}
+\index{1concept@概念!reproducibility@可复现性}
+
+有三类断言检验的不是精度，而是"同样的输入是否给出同样的东西"。
+它们看似平凡，却是上述一切验证的前提。
+
+\begin{veriftable}{三类可复现性断言}{tab:verify-repro}
+\vrow{同输入同指纹}{两次运行的指纹相等}{
+  通过（\crefchap{ch:sp1d} 的 $2\times$ 运行、\crefchap{ch:dft} 的同 Deck 两次运行）}
+\vrow{换实现则指纹不同}{指纹不等}{
+  通过（解析量子 Deck 与自洽量子 Deck、\crefchap{ch:dft} 的材料槽替换）}
+\vrow{初值/延拓无关性}{解与初值路径无关}{
+  \crefchap{ch:sp1d}：热启动 $0.35\to0.95$ 上界，相对差 $<0.5\%$；
+  \crefchap{ch:transport_dd}：两条延拓阶梯，相对差 $<5\times10^{-3}$}
+\vnote{第三行是本文档中最被低估的一类断言。它证明了"初值与延拓只影响
+      收敛路径，不影响收敛解"—— 而这条性质一旦不成立，
+      Newton 类方法的全部结果都会变得依赖调参历史，不再是方程的解。}
+\end{veriftable}
+
+\section{文档侧的表述纪律}
+\label{sec:verify-doc-discipline}
+
+最后，把上述判据体系翻译成一条写作纪律。本文档的每一张验证表
+都有三列，且三列的含义是固定的：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.16\textwidth} p{0.72\textwidth}@{}}
+\toprule
+\textbf{列} & \textbf{含义与纪律}\\
+\midrule
+基准 & 检验的对象。措辞要能回答"若它错了，什么会跟着错"\\
+判据 & \textbf{测试断言的门槛}。它是回归门禁，不随版本漂移\\
+实测 & \textbf{编写时观测到的值}。它带有效数字、可回查，但会随版本演化；
+       引用时必须连同模块版本一并引用\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+纪律的另一半是\textbf{什么不能进"实测"列}：仅有趋势正确、
+仅有一阶吻合、或无独立基准可对照者，一律进 §x.6 的"适用边界"。
+本文档第 \ref{ch:transport_dd} 章 T1 基准中"未做"的一项
+（与一维 SP 的带边差）就是这条纪律的应用：它在\emph{原理上}
+不可达，因此被写成诚实结论，而不是待办事项。
+
+\cleardoublepage

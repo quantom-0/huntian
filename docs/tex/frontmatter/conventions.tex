@@ -1,0 +1,65 @@
+% =====================================================================
+%  conventions.tex —— 全局约定
+%  这些约定对全文所有模块章生效，各章不再重复声明。
+% =====================================================================
+
+\chapter*{全局约定}
+\addcontentsline{toc}{chapter}{全局约定}
+\markboth{全局约定}{全局约定}
+
+\section*{单位制与坐标}
+
+全文采用国际单位制（SI），数值结果按器件工程惯例换算并标注单位。竖直坐标 $z$
+的取法在各章统一为：\emph{自金属/半导体界面指向半导体体内为正}。这一取向是
+约定而非物理，但它决定了导带带阶与极化面电荷的符号；跨章引用时以此为准。
+
+势（potential）以伏特计，能量以电子伏特计。在本文档中，一处静电势
+$\varphi$ 与相应的能量 $q\varphi$ 在数值上相等（$q\varphi$ 以 eV 计），
+故正文中二者常直接互用而不显式写出 $q$；凡出现此类互用时，均以单位
+（\U{V} 对 \U{eV}）区分。
+
+\section*{能量零点}
+
+平衡态下费米能级取为能量零点，即 $\Ef=0$。薛定谔方程的本征能量 $\Ei$
+与导带边 $\Ec(z)$ 均以该零点为基准，因此束缚态表现为 $\Ei<0$，
+金属/势垒界面的导带边为 $\Ec(0)=q(\phib-V_g)$。
+
+\section*{符号与命名}
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.25em,topsep=0.3em]
+  \item \textbf{物理量}：沿用前面的\emph{符号表}，全局唯一。
+  \item \textbf{模块标识}：形如 \pid{physics.quantum.sp1d} 的点分小写字符串，
+        与代码中 \texttt{MANIFEST.module\_id} 逐字符一致，排版为等宽体。
+  \item \textbf{数据通道键}（artifact key）：形如 \akey{polarization}、
+        \akey{quantum}，与代码 \texttt{ctx.put}/\texttt{ctx.require} 的实参一致。
+  \item \textbf{参数名}：形如 \akey{tolerance_eV}，与插件 \texttt{ParamSpec}
+        的声明一致；可标定量以 $\ast$ 标记。
+  \item \textbf{文件路径}：相对仓库根目录书写，排版为等宽体。
+\end{itemize}
+
+\section*{术语}
+
+\term{二维电子气}{two-dimensional electron gas, 2DEG}、
+\term{高电子迁移率晶体管}{HEMT}、
+\term{漂移扩散}{drift--diffusion, DD}、
+\term{有限体积}{finite volume, FV} 等术语在首次出现时于括号内给出原文，
+其后一律使用中文。物理量与算子的拉丁字母记号不译。
+
+\section*{验证证据的表述纪律}
+
+本文档对"验证到什么程度"作严格二分，全文一致：
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.25em,topsep=0.3em]
+  \item \textbf{判据}列记录\emph{测试断言的门槛}。它是回归门禁，不随版本漂移。
+  \item \textbf{实测}列记录\emph{文档编写时实际观测到的值}。它带有效数字，
+        可回查，但会随版本演化而变；引用时必须连同模块版本一并引用。
+  \item 仅有一阶吻合、趋势正确或无独立基准可对照者，一律进入
+        \emph{适用边界与已知局限}，不得写入"实测"列。
+  \item 未标注验证状态的数值，默认视为\textbf{未验证}。
+\end{itemize}
+
+模块的验证状态取三个值之一，与代码 \texttt{ModuleManifest.verification} 一致：
+\texttt{partially-verified}（存在闭式解或收敛阶证据，但绝对数值未标定）、
+\texttt{verified}（在独立基准上标定通过）、\texttt{unverified}（占位实现）。
+
+\cleardoublepage

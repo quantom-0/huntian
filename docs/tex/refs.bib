@@ -1,0 +1,360 @@
+% =====================================================================
+%  refs.bib —— 全局唯一参考文献库
+%
+%  收录规则（本文档的硬纪律，请不要放宽）：
+%    1. 每条必须给出 DOI 或 ISBN，或明确标注其可核验的载体；
+%    2. 条目元数据（卷、期、页、年）一律经 Crossref/出版商记录核对，
+%       不凭记忆书写；
+%    3. 核验方式与日期记在每条的 note 字段（verification marker），
+%       使读者可以复查，也使后续版本可审计。
+%
+%  当前状态：P0 阶段首批 16 条，全部为第 10 章
+%  （physics.quantum.sp1d）及其前置章节所引用者。
+%  其余章节的文献在其所属阶段（P1–P5）逐条核验后追加。
+%
+%  核验日期：2026-10-09（Crossref REST API，逐条按 DOI 或题录回查）
+% =====================================================================
+
+
+% ---------------------------------------------------------------------
+%  一、III–氮化物材料与极化（物理输入）
+% ---------------------------------------------------------------------
+
+@article{ambacher1999,
+  author       = {Ambacher, O. and Smart, J. and Shealy, J. R. and others},
+  title        = {Two-dimensional electron gases induced by spontaneous and
+                  piezoelectric polarization charges in {N}- and {Ga}-face
+                  {AlGaN}/{GaN} heterostructures},
+  journaltitle = {Journal of Applied Physics},
+  volume       = {85},
+  number       = {6},
+  pages        = {3222--3233},
+  year         = {1999},
+  doi          = {10.1063/1.369664},
+  note         = {Crossref 核验 2026-10-09}
+}
+
+@article{ambacher2000,
+  author       = {Ambacher, O. and Foutz, B. and Smart, J. and others},
+  title        = {Two dimensional electron gases induced by spontaneous and
+                  piezoelectric polarization in undoped and doped
+                  {AlGaN}/{GaN} heterostructures},
+  journaltitle = {Journal of Applied Physics},
+  volume       = {87},
+  number       = {1},
+  pages        = {334--344},
+  year         = {2000},
+  doi          = {10.1063/1.371866},
+  note         = {Crossref 核验 2026-10-09}
+}
+
+@article{ambacher2002,
+  author       = {Ambacher, O. and Majewski, J. and Miskys, C. and others},
+  title        = {Pyroelectric properties of {Al(In)GaN}/{GaN} hetero- and
+                  quantum well structures},
+  journaltitle = {Journal of Physics: Condensed Matter},
+  volume       = {14},
+  number       = {13},
+  pages        = {3399--3434},
+  year         = {2002},
+  doi          = {10.1088/0953-8984/14/13/302},
+  note         = {Crossref 核验 2026-10-09。\textbf{注意}：仓库内多处将此文
+                  记为 ``J. Appl. Phys. \textbf{92}, 3202 (2002)''，
+                  该卷页无法在 Crossref 的 JAP 2002 年记录中复现，
+                  属引用错误，本文档统一采用此处核验后的正确出处。}
+}
+
+@article{vurgaftman2003,
+  author       = {Vurgaftman, I. and Meyer, J. R.},
+  title        = {Band parameters for nitrogen-containing semiconductors},
+  journaltitle = {Journal of Applied Physics},
+  volume       = {94},
+  number       = {6},
+  pages        = {3675--3696},
+  year         = {2003},
+  doi          = {10.1063/1.1600519},
+  note         = {Crossref 核验 2026-10-09}
+}
+
+@article{bernardini1997,
+  author       = {Bernardini, Fabio and Fiorentini, Vincenzo and Vanderbilt, David},
+  title        = {Spontaneous polarization and piezoelectric constants of
+                  {III-V} nitrides},
+  journaltitle = {Physical Review B},
+  volume       = {56},
+  number       = {16},
+  pages        = {R10024--R10027},
+  year         = {1997},
+  doi          = {10.1103/PhysRevB.56.R10024},
+  note         = {Crossref 核验 2026-10-09}
+}
+
+@article{dreyer2016,
+  author       = {Dreyer, Cyrus E. and Janotti, Anderson and Van de Walle, Chris G.
+                  and Vanderbilt, David},
+  title        = {Correct Implementation of Polarization Constants in Wurtzite
+                  Materials and Impact on {III}-Nitrides},
+  journaltitle = {Physical Review X},
+  volume       = {6},
+  number       = {2},
+  pages        = {021038},
+  year         = {2016},
+  doi          = {10.1103/PhysRevX.6.021038},
+  note         = {Crossref 核验 2026-10-09}
+}
+
+@article{kyrtsos2019,
+  author       = {Kyrtsos, Alexandros and Matsubara, Masahiko and Bellotti, Enrico},
+  title        = {First-principles study of the impact of the atomic configuration
+                  on the electronic properties of {Al}$_x${Ga}$_{1-x}${N} alloys},
+  journaltitle = {Physical Review B},
+  volume       = {99},
+  number       = {3},
+  pages        = {035201},
+  year         = {2019},
+  doi          = {10.1103/PhysRevB.99.035201},
+  note         = {Crossref 核验 2026-10-09。\texttt{data/dft\_lookup/algan\_gan.json}
+                  引作 GaN/AlN 端点常数与 HSE06/PBE 带隙来源}
+}
+
+
+% ---------------------------------------------------------------------
+%  二、数值方法与器件物理
+% ---------------------------------------------------------------------
+
+@article{scharfetter1969,
+  author       = {Scharfetter, D. L. and Gummel, H. K.},
+  title        = {Large-signal analysis of a silicon {R}ead diode oscillator},
+  journaltitle = {IEEE Transactions on Electron Devices},
+  volume       = {16},
+  number       = {1},
+  pages        = {64--77},
+  year         = {1969},
+  doi          = {10.1109/T-ED.1969.16566},
+  note         = {Crossref 核验 2026-10-09}
+}
+
+@article{benDaniel1966,
+  author       = {BenDaniel, D. J. and Duke, C. B.},
+  title        = {Space-Charge Effects on Electron Tunneling},
+  journaltitle = {Physical Review},
+  volume       = {152},
+  number       = {2},
+  pages        = {683--692},
+  year         = {1966},
+  doi          = {10.1103/PhysRev.152.683},
+  note         = {Crossref 核验 2026-10-09。异质界面有效质量有序化条件的出处}
+}
+
+@article{fangHoward1966,
+  author       = {Fang, F. F. and Howard, W. E.},
+  title        = {Negative Field-Effect Mobility on (100) {Si} Surfaces},
+  journaltitle = {Physical Review Letters},
+  volume       = {16},
+  number       = {18},
+  pages        = {797--799},
+  year         = {1966},
+  doi          = {10.1103/PhysRevLett.16.797},
+  note         = {Crossref 核验 2026-10-09。变分波函数形状用作热启动初值}
+}
+
+@article{anderson1965,
+  author       = {Anderson, Donald G.},
+  title        = {Iterative Procedures for Nonlinear Integral Equations},
+  journaltitle = {Journal of the ACM},
+  volume       = {12},
+  number       = {4},
+  pages        = {547--560},
+  year         = {1965},
+  doi          = {10.1145/321296.321305},
+  note         = {Crossref 核验 2026-10-09}
+}
+
+@article{caugheyThomas1967,
+  author       = {Caughey, D. M. and Thomas, R. E.},
+  title        = {Carrier mobilities in silicon empirically related to doping
+                  and field},
+  journaltitle = {Proceedings of the IEEE},
+  volume       = {55},
+  number       = {12},
+  pages        = {2192--2193},
+  year         = {1967},
+  doi          = {10.1109/PROC.1967.6123},
+  note         = {Crossref 核验 2026-10-09}
+}
+
+@article{shermanMorrison1950,
+  author       = {Sherman, Jack and Morrison, Winifred J.},
+  title        = {Adjustment of an Inverse Matrix Corresponding to a Change in
+                  One Element of a Given Matrix},
+  journaltitle = {The Annals of Mathematical Statistics},
+  volume       = {21},
+  number       = {1},
+  pages        = {124--127},
+  year         = {1950},
+  doi          = {10.1214/aoms/1177729893},
+  note         = {Crossref 核验 2026-10-09。本文档只用到秩-1 形式；
+                  秩-$k$ 推广通常归于 Woodbury (1950) 的普林斯顿技术报告
+                  （Memorandum Report 42），该报告无 DOI，故不列入本库，
+                  正文以脚注说明。}
+}
+
+@article{monkhorstPack1976,
+  author       = {Monkhorst, Hendrik J. and Pack, James D.},
+  title        = {Special points for {B}rillouin-zone integrations},
+  journaltitle = {Physical Review B},
+  volume       = {13},
+  number       = {12},
+  pages        = {5188--5192},
+  year         = {1976},
+  doi          = {10.1103/PhysRevB.13.5188},
+  note         = {Crossref 核验 2026-10-09}
+}
+
+@article{perdew1996,
+  author       = {Perdew, John P. and Burke, Kieron and Ernzerhof, Matthias},
+  title        = {Generalized Gradient Approximation Made Simple},
+  journaltitle = {Physical Review Letters},
+  volume       = {77},
+  number       = {18},
+  pages        = {3865--3868},
+  year         = {1996},
+  doi          = {10.1103/PhysRevLett.77.3865},
+  note         = {Crossref 核验 2026-10-09。PBE 泛函；其带隙系统性偏低，
+                  是本项目 \texttt{eg\_policy=reject\_pbe} 红线的物理依据}
+}
+
+@article{heyd2003,
+  author       = {Heyd, Jochen and Scuseria, Gustavo E. and Ernzerhof, Matthias},
+  title        = {Hybrid functionals based on a screened Coulomb potential},
+  journaltitle = {The Journal of Chemical Physics},
+  volume       = {118},
+  number       = {18},
+  pages        = {8207--8215},
+  year         = {2003},
+  doi          = {10.1063/1.1564060},
+  note         = {Crossref 核验 2026-10-09。有更正：
+                  \textit{J. Chem. Phys.} \textbf{124}, 219906 (2006),
+                  DOI 10.1063/1.2204597（即 HSE06）}
+}
+
+
+% ---------------------------------------------------------------------
+%  三、第一性原理计算工具与赝势（materials.dft 的 qe_* 后端）
+% ---------------------------------------------------------------------
+
+@article{giannozzi2009,
+  author       = {Giannozzi, Paolo and Baroni, Stefano and Bonini, Nicola and others},
+  title        = {{QUANTUM ESPRESSO}: a modular and open-source software project
+                  for quantum simulations of materials},
+  journaltitle = {Journal of Physics: Condensed Matter},
+  volume       = {21},
+  number       = {39},
+  pages        = {395502},
+  year         = {2009},
+  doi          = {10.1088/0953-8984/21/39/395502},
+  note         = {Crossref 核验 2026-10-09}
+}
+
+@article{larsen2017,
+  author       = {Larsen, Ask Hjorth and Mortensen, Jens J{\o}rgen and
+                  Blomqvist, Jakob and others},
+  title        = {The atomic simulation environment---a {P}ython library for
+                  working with atoms},
+  journaltitle = {Journal of Physics: Condensed Matter},
+  volume       = {29},
+  number       = {27},
+  pages        = {273002},
+  year         = {2017},
+  doi          = {10.1088/1361-648X/aa680e},
+  note         = {Crossref 核验 2026-10-09。\texttt{materials.dft} 的
+                  \texttt{qe\_local}/\texttt{qe\_slurm} 后端以 ASE 作为
+                  Quantum ESPRESSO 的驱动层}
+}
+
+@article{prandini2018,
+  author       = {Prandini, Gianluca and Marrazzo, Antimo and Castelli, Ivano E.
+                  and Mounet, Nicolas and Marzari, Nicola},
+  title        = {Precision and efficiency in solid-state pseudopotential
+                  calculations},
+  journaltitle = {npj Computational Materials},
+  volume       = {4},
+  pages        = {72},
+  year         = {2018},
+  doi          = {10.1038/s41524-018-0127-2},
+  note         = {Crossref 核验 2026-10-09。SSSP 赝势集；
+                  \texttt{materials.dft} 的 \texttt{pseudopotential\_family}
+                  默认值为 \texttt{SSSP/PBEsol/efficiency@1.3.0}}
+}
+
+
+% ---------------------------------------------------------------------
+%  四、验证与确认（V&V）方法学
+% ---------------------------------------------------------------------
+
+@article{roache2002,
+  author       = {Roache, Patrick J.},
+  title        = {Code Verification by the Method of Manufactured Solutions},
+  journaltitle = {Journal of Fluids Engineering},
+  volume       = {124},
+  number       = {1},
+  pages        = {4--10},
+  year         = {2002},
+  doi          = {10.1115/1.1436090},
+  note         = {Crossref 核验 2026-10-09（在线发表于 2001-11-12，
+                  归入 2002 年第 124 卷第 1 期）}
+}
+
+@techreport{salari2000,
+  author      = {Salari, Kambiz and Knupp, Patrick},
+  title       = {Code Verification by the Method of Manufactured Solutions},
+  institution = {Sandia National Laboratories},
+  number      = {SAND2000-1444},
+  year        = {2000},
+  doi         = {10.2172/759450},
+  note        = {Crossref 核验 2026-10-09。技术报告，报告号取自 Crossref 记录}
+}
+
+@book{oberkampf2010,
+  author    = {Oberkampf, William L. and Roy, Christopher J.},
+  title     = {Verification and Validation in Scientific Computing},
+  publisher = {Cambridge University Press},
+  year      = {2010},
+  doi       = {10.1017/CBO9780511760396},
+  note      = {Crossref 核验 2026-10-09}
+}
+
+
+% ---------------------------------------------------------------------
+%  五、数值线性代数
+% ---------------------------------------------------------------------
+
+@book{golub2013,
+  author    = {Golub, Gene H. and Van Loan, Charles F.},
+  title     = {Matrix Computations},
+  edition   = {4},
+  publisher = {Johns Hopkins University Press},
+  year      = {2013},
+  isbn      = {9781421407944},
+  doi       = {10.56021/9781421407944},
+  note      = {Crossref 核验 2026-10-09（Crossref 记录的出版年为 2012，
+                  第 4 版纸本 ISBN 9781421407944、电子版 9781421408590）}
+}
+
+@book{saad2003,
+  author    = {Saad, Yousef},
+  title     = {Iterative Methods for Sparse Linear Systems},
+  edition   = {2},
+  publisher = {Society for Industrial and Applied Mathematics},
+  year      = {2003},
+  isbn      = {9780898715347},
+  doi       = {10.1137/1.9780898718003},
+  note      = {Crossref 核验 2026-10-09}
+}
+
+
+% =====================================================================
+%  待核验队列（P4–P5 逐条回查 Crossref 后再启用；未核验者一律不得进入正文）
+% ---------------------------------------------------------------------
+%  （暂空：P4 的总论章若需新文献，在此登记后再启用）
+% =====================================================================

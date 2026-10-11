@@ -1,0 +1,547 @@
+% module_id: materials.dft
+% module_version: 0.1.0
+% plugin_dir: plugins/materials_dft
+% source_files: plugins/materials_dft/{__init__,plugin,table_io,qe_driver,slurm}.py
+% tests: tests/test_materials_dft.py, tests/test_materials_dft_table.py,
+%        tests/test_materials_dft_overrides.py, tests/test_materials_dft_benchmarks.py,
+%        tests/test_hotswap_materials.py
+
+\chapter{第一性原理材料参数通道}
+\label{ch:dft}
+
+\begin{quote}
+\small
+\noindent\textbf{模块标识}\quad\pid{materials.dft}\qquad
+\textbf{版本}\quad 0.1.0\qquad
+\textbf{类别}\quad physics
+\end{quote}
+
+\noindent
+本章记述材料库的第一性原理覆盖通道。它不引入新的物理模型，而是回答一个
+更基础的问题：\emph{器件模型里那些材料常数是从哪里来的，可信到什么程度}。
+本模块的整体设计围绕一个判断展开 —— 在器件级仿真中，材料常数的\textbf{系统性
+误差}往往比数值格式误差大一个量级以上，因此对材料参数的\emph{来源、
+不确定度与适用条件}的显式管理，比把求解器精度再提高一档更有价值。
+
+\section{模块契约}
+\label{sec:dft-contract}
+\index{4module@模块!materials.dft}
+
+\begin{modulecard}{materials.dft}{0.1.0}
+  \cardrow{类别}{physics（材料数据，流水线阶段）}
+  \cardrow{能力}{materials, materials.dft, materials.validation}
+  \cardrow{依赖 artifact}{structure}
+  \cardrow{产出 artifact}{materials, dft\_provenance}
+  \cardrow{验证状态}{partially-verified}
+  \cardrow{源码}{\fpath{plugins/materials_dft/}（多文件插件包）}
+  \cardrow{测试}{\fpath{tests/test_materials_dft*.py} 等五份（含 D0--D3 基准与替换验收）}
+  \cardsep
+  \cardrow{可标定参数}{\textbf{无}（见下）}
+  \cardrow{后端}{\akey{table}（默认，零第三方依赖）/ \akey{qe_local} / \akey{qe_slurm}（后两者本阶段未实现）}
+\end{modulecard}
+
+本模块\textbf{没有任何可标定参数}，且这一条是被测试固化的断言，而不是注释里的
+约定。理由是方法论上的：\akey{ecut_wfc_ry}、\akey{kspacing_1_A}、
+\akey{pseudopotential_family} 这些量是\emph{数值方法的选择}，
+不是器件的物理参数。若允许自动拟合循环去调整它们，就等于\emph{为了对上数据
+而调网格} —— 那是把标定与收敛性混为一谈，会系统性地破坏两者的可信度。
+可标定量属于器件模型（如 \akey{screening}，见 \crefchap{ch:polarization}）。
+
+\section{物理前提与精度红线}
+\label{sec:dft-premise}
+
+\subsection{泛函的系统误差不是"误差"，是偏移}
+\label{sec:dft-functional}
+
+密度泛函理论在设备级仿真的语境下，其价值不在于"更准"，而在于
+\emph{可追溯}：每一个常数都能追到一次具体的计算设定与一个具体的出处。
+但有一个必须显式处理的系统性偏移 —— 交换关联泛函对带隙的估计。
+
+广义梯度近似（PBE）\cite{perdew1996} 对半导体带隙的系统性低估是
+众所周知且量级巨大的：本仓库的查找表记录 GaN 的 PBE 原始带隙为
+$1.72$\U{eV}，而实验值为 $3.42$\U{eV} —— 偏低约 $1.7$\U{eV}，
+相对误差 $50\%$。这\emph{不是实现缺陷}，是泛函的已知行为。
+
+问题在于这个数会被下游怎样使用。带隙在本流水线中流经两条通路：
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.3em,topsep=0.35em]
+  \item 导带带阶 $\dEc=r\,(E_g^{\text{barrier}}-E_g^{\text{channel}})$，
+        进入 \pid{physics.quantum.sp1d}（\crefchap{ch:sp1d}）的
+        薛定谔方程，直接决定势阱深度；
+  \item 极化模型的带阶，进入 \crefchap{ch:polarization}。
+\end{itemize}
+
+把偏低 $1.7$\U{eV} 的带隙喂进去，势阱深度会错到使整个二维电子气
+计算结果失去意义。因此本模块把"PBE 带隙不得进入器件模型"写成
+\textbf{代码里的红线}，而不是文档里的建议。
+
+\subsection{三条精度红线}
+\label{sec:dft-redlines}
+\index{1concept@概念!precision red line@精度红线}
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.4em,topsep=0.4em]
+  \item \textbf{\akey{eg_policy="reject_pbe"}（默认）。}
+        当 \akey{functional="pbe"} 与 \akey{eg_policy="reject_pbe"} 同时出现时，
+        \texttt{validate()} 返回一条硬 issue，阶段拒绝运行。错误信息明确
+        指出带隙的消费者（\pid{physics.quantum.sp1d} 与极化带阶）与原因。
+        这不是警告，是拒跑。
+
+  \item \textbf{\akey{eg_policy="scissor_to_reference"} 必须记账。}
+        允许用 PBE 带隙，但只能以剪刀修正的形式，且平移量、原始 PBE 值
+        与"验证等级被降级"三件事都写进溯源。见 \S\ref{sec:dft-scissor}。
+
+  \item \textbf{无收敛证据的条目必须标注。}
+        只有同时具备 \akey{ecut_wfc_ry} 与 \akey{kspacing_1_A}
+        两条\emph{两点收敛记录}且声明了外推的条目，才被认作
+        \akey{converged=true}。其余条目即便被采纳，也必须在覆盖报告中
+        标为 \akey{converged=false}，并列入溯源的假设清单 ——
+        \textbf{绝不静默使用}。
+\end{enumerate}
+
+第 3 条在本仓库的查找表上有一个诚实的后果：\fpath{data/dft_lookup/algan_gan.json}
+中的\emph{全部}条目都是 \akey{convergence: null}，因为逐篇文献的两点收敛
+设置大多未以可提取的形式发表。查找表自己的 \akey{honesty_note} 写明：
+所引不确定度区间\emph{跨越了已发表计算的散布}，它是文献收敛性的
+\emph{代理指标}，不能替代真正的收敛记录。因此该表只有在用户显式选择
+\akey{override_policy} 时才会被采纳。
+
+\subsection{三种后端，一个契约}
+\label{sec:dft-backends}
+\index{1concept@概念!backend contract@后端契约}
+
+\akey{backend} 有三个取值，它们共享同一份 artifact 契约：
+
+{\small
+\begin{longtable}{@{}p{0.14\textwidth} p{0.34\textwidth} p{0.42\textwidth}@{}}
+\toprule
+\textbf{后端} & \textbf{含义} & \textbf{本阶段状态}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{后端} & \textbf{含义} & \textbf{本阶段状态}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\akey{table} & 服务一份预计算、带版本号的 JSON 查找表 &
+  \textbf{已实现}，零第三方依赖\\
+\akey{qe_local} & 经 ASE \cite{larsen2017} 驱动本机
+  Quantum ESPRESSO \cite{giannozzi2009} &
+  仅完成\emph{可用性探测}（\akey{ase} 可导入、\texttt{pw.x} 在 PATH 上）；
+  计算流程未实现\\
+\akey{qe_slurm} & 同上，提交到集群 &
+  未实现\\
+\end{longtable}
+}
+
+把三者放在同一个契约下的意义在于：一旦 \akey{qe_local} 落地，
+下游模块\emph{一行都不用改}。本阶段的验收测试正是这一性质的证明
+（\S\ref{sec:dft-verification}）。
+
+\paragraph{惰性导入是硬要求。} 插件发现机制会加载每一个插件，因此加载本模块
+\textbf{不得}把 \akey{ase}、\akey{qe_driver}、\akey{slurm} 拉进
+\texttt{sys.modules}。测试用一个独立子进程断言这一点：在
+\akey{table} 默认后端下，\texttt{sys.modules} 中不得出现这三者。
+这一条保证了 JSON Deck 在任何环境（包括无 ASE、无 QE 的纯标准库环境）
+都能运行。
+
+\section{公式化}
+\label{sec:dft-formulation}
+
+\subsection{合金插值：Vegard 加弯曲项}
+\label{sec:dft-vegard}
+\index{3method@方法!Vegard 插值}
+
+三元合金 Al$_x$Ga$_{1-x}$N 的常数由两个端点材料线性插值，并叠加一个
+\emph{弯曲项}（bowing）修正：
+
+\begin{equation}
+V(x) \;=\; (1-x)\,V_{\text{GaN}} \;+\; x\,V_{\text{AlN}}
+\;+\; b_V\,x\,(1-x),
+\label{eq:vegard}
+\end{equation}
+
+$b_V$ 为属性 $V$ 的弯曲系数。弯出项 $x(1-x)$ 在两端点为零、在中点最大，
+恰好刻画"合金不是端点性质的线性混合"这一物理事实。本仓库为 AlGaN
+记录了两个非零弯曲系数：
+
+\begin{equation}
+b_{p_{\text{sp}}} = 0.021\ \U{C/m^2},
+\qquad
+b_{E_g} = 1.0\ \U{eV},
+\label{eq:bowing}
+\end{equation}
+
+其余属性取 $b_V=0$，退化为狭义 Vegard 定律。带隙的弯曲系数在本器件族中
+历来显著（文献值散布较大），$1.0$\U{eV} 属常用取值；它直接影响
+$\dEc$，因此也直接影响势阱深度。
+
+\crefeq{eq:vegard} 中 $x$ 是 AlN 摩尔分数，定义域 $[0,1]$ —— 越界即报错，
+不做静默钳制。
+
+\subsection{剪刀修正}
+\label{sec:dft-scissor}
+\index{3method@方法!scissor 修正}
+
+当 \akey{eg_policy="scissor_to_reference"} 时，PBE 带隙被\emph{刚性平移}
+到参考带隙（内置库的、来自实验的值），平移量为
+
+\begin{equation}
+\Delta_{\text{scissor}} \;=\; E_g^{\text{PBE}} \;-\; E_g^{\text{ref}} .
+\label{eq:scissor}
+\end{equation}
+
+采纳的带隙即参考值 $E_g^{\text{ref}}$，而两个附带量被写入材料库：
+
+\begin{equation}
+\mathtt{dft\_eg\_uncorrected\_eV} \;=\; E_g^{\text{PBE}},
+\qquad
+\mathtt{dft\_eg\_shift\_eV} \;=\; \Delta_{\text{scissor}} .
+\label{eq:scissor-record}
+\end{equation}
+
+两者都带 \akey{dft_} 前缀。这个前缀是契约的一部分：内置物理模块
+不消费任何 \akey{dft_} 开头的键，因此原始 PBE 值与平移量只能被审计，
+不可能被误用。
+
+同时，验证等级被\textbf{降级}：若条目原为 \akey{verified}，
+经剪刀修正后降为 \akey{partially-verified}。理由直白：
+剪刀修正是一个\emph{已知不物理}的补救，它使带隙对上实验的同时，
+必然破坏了带边与有效质量之间的相对关系。把它标成"已验证"是自欺。
+
+\subsection{陈旧判据}
+\label{sec:dft-stale}
+\index{3method@方法!stale 判据}
+
+查找表记录了一组\emph{名义生产设置}。若调用者请求的数值设置与表中记录不符，
+则表被判定为\emph{陈旧}（stale）。判据是一个集合：
+
+\begin{equation}
+\mathcal{M} \;=\;
+\Bigl\{\, k \in \mathcal{K}_{\text{stale}} \;:\; p_k \neq t_k \,\Bigr\},
+\qquad
+\mathcal{K}_{\text{stale}} = \{
+\mathtt{pp}, \mathtt{ecut}, \mathtt{kspacing}, \mathtt{sqs\_seed}, \mathtt{spin\_orbit}
+\},
+\label{eq:stale}
+\end{equation}
+
+$p_k$ 为参数请求值、$t_k$ 为表中记录值；浮点比较用 $10^{-12}$ 的绝对容差。
+$\mathcal{M}\neq\varnothing$ 且 \akey{allow_stale_cache=False}（默认）时，
+校验返回硬 issue。
+
+注意 \akey{functional} \emph{不在} $\mathcal{K}_{\text{stale}}$ 中。这不是遗漏：
+泛函由带隙红线管辖，而不由陈旧判据管辖，且一份表完全可能合法地
+同时持有 PBE 的结构常数与 HSE 的带隙（本仓库的表正是如此）。
+
+$\mathcal{K}_{\text{stale}}$ 中的 \akey{kspacing_1_A} 是布里渊区积分的
+$k$ 点密度（Monkhorst--Pack 间距 \cite{monkhorstPack1976}）。
+把它纳入陈旧判据是必要的：$k$ 点密度与平面波截断是\emph{两个独立的}
+收敛参数，只检查其中一个会让另一维度的欠收敛悄悄溜过去。
+
+同一集合中的 \akey{pseudopotential_family} 默认取
+\texttt{SSSP/PBEsol/efficiency@1.3.0}，即固体态赝势库的"效率"版本
+\cite{prandini2018}。赝势族必须随结果一起记录：同一结构用不同赝势族
+算出的晶格常数与弹性常数会有可观差异，而这种差异\emph{不会}在
+任何收敛记录中显示出来。
+
+\subsection{基准判据：相对误差与容差带}
+\label{sec:dft-tolerance}
+
+材料侧的自验证基准（D 阶梯）以\emph{实验值}为参考，相对误差定义为
+
+\begin{equation}
+e(v) \;=\; \frac{\abs{v - v_{\text{ref}}}}{\abs{v_{\text{ref}}}} ,
+\label{eq:rel-error}
+\end{equation}
+
+并按属性类别给出容差带：
+
+\begin{equation}
+\text{D0}:\ e_a,e_c \le 0.01, \quad
+\text{D1}:\ e_{C_{13}},e_{C_{33}} \le 0.10, \quad
+\text{D2}:\ e_{p_{\text{sp}}} \le 0.15, \quad
+\text{D3}:\ e_{E_g} \le 0.05 .
+\label{eq:tolerance}
+\end{equation}
+
+容差带的宽窄反映了各属性的可计算程度：晶格常数是 DFT 最擅长的量（$1\%$），
+弹性常数次之（$10\%$），自发极化依赖 Berry 相位方法且文献间分歧大（$15\%$），
+而带隙必须用杂化泛函才可比于实验（$5\%$ 是针对 HSE 采纳值而言，
+不是对 PBE 值的宽容）\cite{heyd2003}。
+
+参考值在测试中\emph{独立于内置材料库}给出，因此对
+\fpath{materials.json} 的任何错误编辑都不可能悄悄移动靶子。
+
+\section{合并流程与实现}
+\label{sec:dft-merge}
+\index{3method@方法!material overlay@材料覆盖合并}
+
+\subsection{覆盖策略三态}
+\label{sec:dft-override}
+
+\akey{override_policy} 决定每个属性最终由谁供给：
+
+{\small
+\begin{longtable}{@{}p{0.22\textwidth} p{0.30\textwidth} p{0.38\textwidth}@{}}
+\toprule
+\textbf{取值} & \textbf{非带隙属性} & \textbf{带隙}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{取值} & \textbf{非带隙属性} & \textbf{带隙}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\akey{dft_wins}（默认） & 采纳 DFT 值 & 按泛函与 \akey{eg_policy} 判定\\
+\akey{reference_wins} & 保留内置值（不覆盖） & 保留内置值\\
+\akey{dft_only_gapless} & 采纳 DFT 值 & \emph{不}采纳（保留内置值）\\
+\end{longtable}
+}
+
+第三态的存在理由值得说明：它表达了"我接受 DFT 的结构与弹性常数，
+但我不想让 DFT 的带隙以任何形式（包括剪刀修正）影响我的器件模型"
+这一立场。这是一个合理的保守选择，而把它表达为一个显式的策略值，
+比让用户去手工编辑材料库要安全得多。
+
+\subsection{合并规则}
+
+合并遵循"\emph{叠加而非替换}"的原则：以内置库为底，把 DFT 层叠上去，
+未被覆盖的属性原样保留。因此合并后的库仍然是一个完整的材料库，
+而不是一份"只有 DFT 关心过的那几个键"的残缺品。
+
+每条覆盖都被记入覆盖报告的一行，含材料名、属性名、内置值、DFT 值、
+采纳方向（\akey{"dft"} 或 \akey{"reference"}）、相对偏差百分比、
+条目的收敛标志与出处字符串。\textbf{没有出处字符串的覆盖行是不允许存在的}，
+该性质被测试直接断言。
+
+\subsection{溯源 artifact}
+\label{sec:dft-provenance}
+\index{5artifact@数据通道!dft\_provenance}
+
+除 \akey{materials} 之外，本模块还写出 \akey{dft_provenance}，
+其结构固定包含：
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.28em,topsep=0.35em]
+  \item \akey{backend}、\akey{functional}、\akey{pseudopotential_family}；
+  \item \akey{numerics}：\akey{ecut_wfc_ry}、\akey{kspacing_1_A}、
+        \akey{sqs_seed}、\akey{spin_orbit}，以及
+        \akey{table_version} 与 \akey{table_content_hash}；
+  \item \akey{entries}：逐材料的出处、验证等级、收敛标志、不确定度与假设清单；
+  \item \akey{override_report}：逐属性的采纳决策（见上）；
+  \item \akey{assumptions}：模块级的诚实边界清单（见 \S\ref{sec:dft-limits}）。
+\end{itemize}
+
+其中 \akey{table_content_hash} 是查找表\emph{文件内容}的散列
+（前 16 位十六进制）。它使"这次仿真用的是哪一份表"成为可核对的量，
+而不是靠文件路径与记忆。
+
+\subsection{缓存键}
+
+对 \akey{qe_*} 后端，结果缓存键被设计为
+
+\begin{equation}
+\begin{split}
+k_{\text{cache}} \;=\; \mathrm{hash}\bigl(&\texttt{structure},\
+  \texttt{functional},\ \texttt{pseudopotential},\\
+  &\texttt{ecut},\ \texttt{kspacing},\ \texttt{sqs\_seed}\bigr),
+\end{split}
+\label{eq:cache-key}
+\end{equation}
+
+\noindent
+\akey{sqs_seed} 进入键是刻意的：特殊准随机结构（SQS）的生成依赖随机种子，
+若种子不进键，同一合金组分在不同运行中会命中不同的超胞，
+可复现性随之失效。
+
+\section{验证与基准}
+\label{sec:dft-verification}
+
+验证分三层：红线作为\emph{行为}被断言、材料数值对\emph{独立实验值}、
+以及\emph{即插即用}层面的替换验收。
+
+\subsection{红线与契约}
+
+\begin{veriftable}{红线、契约与惰性导入}{tab:dft-redlines}
+\vrow{PBE 带隙默认被拒}{返回 \akey{eg-policy} 硬 issue}{通过（阶段拒绝运行）}
+\vrow{HSE06 默认通过校验}{无 issue}{通过}
+\vrow{剪刀模式记录平移量（\akey{dft_eg_uncorrected_eV} 与
+  \akey{dft_eg_shift_eV}）}{三项同时落库}{
+  $E_g=3.42$\U{eV}、原始 $1.72$\U{eV}、平移 $-1.70$\U{eV}（精确到 $10^{-6}$）}
+\vrow{剪刀模式降级验证：不高于 \akey{partially-verified}}{降级一档}{通过（由 \akey{verified} 起算）}
+\vrow{陈旧数值默认被拒}{返回 \akey{stale-cache} 硬 issue}{通过（$90$ vs $60$\U{Ry}）}
+\vrow{陈旧数值需显式接受}{无 issue 且假设清单含 stale}{通过（列出 \akey{ecut_wfc_ry}）}
+\vrow{\textbf{无可标定参数}（\akey{calibratable_params()}）}{返回空}{空元组}
+\vrow{\textbf{默认后端零依赖}}{\akey{table} 为默认；\akey{reject_pbe} 为默认；
+  \akey{hse06} 为默认}{通过}
+\vrow{\textbf{惰性导入无泄漏}（\texttt{sys.modules} 不含
+  \akey{ase}/\akey{qe_driver}/\akey{slurm}）}{无泄漏}{通过（\texttt{LEAKED []}）}
+\vnote{最后三行是本模块最具方法论意义的三条：它们把"不依赖第三方"
+      "不允许拟合"与"不静默使用未收敛数据"从注释变成了可执行的断言。}
+\end{veriftable}
+
+\subsection{材料数值：D0--D3 对实验}
+
+参考值为实验常数，与内置材料库无关，因此对 \fpath{materials.json}
+的误编辑无法移动靶子。实测值为 \fpath{tests/golden/dft_benchmarks_d0_d3.json}
+中固化的相对误差（金样本，任何漂移都会使测试失败）。
+
+\begin{veriftable}{D0--D3 基准：DFT 覆盖后的相对误差（\crefeq{eq:rel-error}）}{tab:dft-benchmarks}
+\vgroup{D0\ \ 晶格常数（容差 $1\%$）}
+\vrow{GaN $a$}{$\le 0.01$}{$0.3449\%$}
+\vrow{GaN $c$}{$\le 0.01$}{$0.3279\%$}
+\vrow{AlN $a$}{$\le 0.01$}{$0.0321\%$}
+\vrow{AlN $c$}{$\le 0.01$}{$0.0602\%$}
+\vgroup{D1\ \ 弹性常数（容差 $10\%$）}
+\vrow{GaN $C_{13}$}{$\le 0.10$}{$0.0000\%$}
+\vrow{GaN $C_{33}$}{$\le 0.10$}{$1.7284\%$}
+\vrow{AlN $C_{13}$}{$\le 0.10$}{$2.7778\%$}
+\vrow{AlN $C_{33}$}{$\le 0.10$}{$1.8767\%$}
+\vgroup{D2\ \ 自发极化（容差 $15\%$；须记录方法差异）}
+\vrow{GaN $p_{\text{sp}}$}{$\le 0.15$}{$0.0000\%$}
+\vrow{AlN $p_{\text{sp}}$}{$\le 0.15$}{$0.0000\%$}
+\vgroup{D3\ \ 带隙（容差 $5\%$，仅对已采纳的 HSE 值）}
+\vrow{GaN $E_g$}{$\le 0.05$}{$0.8772\%$}
+\vrow{AlN $E_g$}{$\le 0.05$}{$3.0645\%$}
+\vnote{GaN 的 $C_{13}$ 与两者的 $p_{\text{sp}}$ 相对误差恰为 $0$，
+      因为所采纳的 DFT 值与参考实验值在表中取同一数值 —— 这是
+      \emph{数值上的吻合}，不构成独立验证；真正独立的是那些非零项。}
+\end{veriftable}
+
+带隙红线在基准层面还有一条更强的断言：合并后的 $E_g$ \emph{不得}等于
+PBE 原始值，同时原始值必须\emph{在库中可查}。实测：GaN 合并带隙
+$3.45$\U{eV} $\neq 1.72$\U{eV}，而 \akey{dft_eg_uncorrected_eV}
+精确等于 $1.72$\U{eV}；AlN 对应 $4.07$\U{eV}。此外，所引不确定度区间
+必须覆盖实验值（或与之相距不超过 $0.6$\U{eV}），以保证引用的散布
+没有把参考值排除在外。
+
+\subsection{即插即用：替换验收}
+
+本模块的设计目标是\emph{零改动替换材料槽}。验收方式与
+\crefchap{ch:sp1d} 相同：同一器件、同一批下游模块，只改 Deck 里
+\akey{materials} 槽的绑定，断言其余的一切不变。
+
+\begin{veriftable}{材料槽替换验收（\fpath{decks/demo_hemt_sp1d.json} vs
+\fpath{decks/demo_hemt_dft.json}）}{tab:dft-hotswap}
+\vrow{新阶段排在首位}{stages[0].slot $=$ \akey{materials}}{通过}
+\vrow{\textbf{只增加一个阶段，其余顺序不动}}{其余槽位序列完全相同}{
+  \texttt{dft\_slots[1:] == sp\_slots}}
+\vrow{调度来自 manifest 依赖而非槽位表}{\akey{requires} 仅含 \akey{structure}}{
+  通过（\akey{produces} 含 \akey{materials}）}
+\vrow{两次运行均成功}{status $=$ success}{通过}
+\vrow{\textbf{下游模块完全一致}}{模块标识与版本逐一相同}{
+  \akey{polarization}、\akey{quantum} 逐字段相同；\akey{extract:0}
+  仍为 \pid{extract.fom}，\akey{results.fom} 仍然存在}
+\vrow{下游确实消费了合并库}{GaN $a=3.178$\U{\AA}（内置为 $3.189$）}{
+  通过（合并库被改动，内置库不受影响）}
+\vrow{\textbf{替换确实改变了物理}}{
+  $0.005 < \abs{\Delta\ns}/\ns < 0.20$}{落在带内（既非毫无影响，也非荒谬偏离）}
+\vrow{两次运行的指纹不同}{两个 Deck 的指纹不等}{通过}
+\vrow{同一 Deck 两次指纹相同}{指纹相等}{通过}
+\vrow{溯源可核对}{每条覆盖都有出处；\akey{adopted} $\in$ \{dft, reference\}}{
+  通过}
+\end{veriftable}
+
+\section{误差来源与适用边界}
+\label{sec:dft-limits}
+\index{1concept@概念!validity limits@适用边界}
+
+\limitsheading
+
+\begin{bounds}
+  \item \textbf{本阶段的表是文献转录，不是本所计算。} 查找表的
+        \akey{provenance} 明确声明：数值来自已发表的 DFT 文献，
+        逐值标注出处与不确定度，\textbf{并非自行计算}。
+        以 GaN/AlN 端点为例，晶格常数与带隙取自
+        Kyrtsos 等的 HSE/PBE 平面波计算 \cite{kyrtsos2019}，
+        自发极化取自 Berry 相位计算 \cite{bernardini1997,dreyer2016}，
+        弹性常数取自第一性原理计算与综述的汇合区间 \cite{vurgaftman2003}。
+        它的作用是"比凭记忆抄常数更硬的先验"，不是终点。
+
+  \item \textbf{全部条目缺少两点收敛记录。} 每一篇文献的收敛设置
+        大多未以可提取的形式发表，因此表中所有条目均为
+        \akey{convergence: null}、\akey{converged=false}。
+        所引不确定度是\emph{文献散布}这一代理指标，不是收敛证据。
+
+  \item \textbf{0\,K、理想晶体、无缺陷。} 真实 MOCVD 材料的
+        位错、杂质与组分涨落被吸收进所引不确定度，而未被建模。
+
+  \item \textbf{无温度修正。} 热导率、热指数等热学键保持内置库取值，
+        不随 DFT 覆盖改变。
+
+  \item \textbf{合金值来自端点插值。} \crefeq{eq:vegard} 的 Vegard 加弯曲形式
+        是对端点值的插值，不是合金的超胞计算。SQS 超胞统计属于
+        \akey{qe_slurm} 阶段，本阶段未实现。
+
+  \item \textbf{PBE 带隙仍然是"可被记录"的。} 红线禁止的是它\emph{进入
+        器件模型}，不是禁止它出现在库中；\akey{dft_eg_uncorrected_eV}
+        正是为审计而保留的。读者不应把它当作可用值。
+
+  \item \textbf{\akey{qe_local} 与 \akey{qe_slurm} 未实现。} 仅完成
+        可用性探测与清晰的失败信息。本阶段不存在"真正重算一遍"的能力，
+        这也是表中"文献转录"声明必须保留的原因。
+
+  \item \textbf{不确定度区间不是置信区间。} 区间 $[v_{\text{lo}},v_{\text{hi}}]$
+        由已发表结果的散布给出，其宽度反映的是\emph{文献间的分歧}，
+        不含任何统计意义。把它当作误差棒做不确定度传播是误用。
+\end{bounds}
+
+\section{接口契约与小结}
+\label{sec:dft-interface}
+\index{5artifact@数据通道!materials}
+
+{\small
+\begin{longtable}{@{}p{0.06\textwidth} p{0.22\textwidth} p{0.62\textwidth}@{}}
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+入 & \akey{structure} &
+  仅需存在（本模块不读几何；依赖声明使调度把它排在极化与量子之前）\\
+入 & \akey{materials}（种入） &
+  内置材料库，作为叠加的底\\
+出 & \akey{materials} &
+  叠加后的完整材料库；被覆盖的键为 \akey{a_lattice_A}, \akey{c_lattice_A},
+  \akey{C13_GPa}, \akey{C33_GPa}, \akey{e31_C_m2}, \akey{e33_C_m2},
+  \akey{p_sp_C_m2}, \akey{m_eff}, \akey{Eg_eV}；
+  另附 \akey{dft_uncertainty}、\akey{dft_eg_uncorrected_eV}、
+  \akey{dft_eg_shift_eV}\\
+出 & \akey{dft_provenance} &
+  后端、泛函、赝势族、数值设置、表版本与内容散列、逐材料条目、
+  覆盖报告、假设清单\\
+\end{longtable}
+}
+
+\noindent
+契约上有一处细节值得点明：\textbf{被覆盖的键是"物理量名"，不是"DFT 量名"}。
+\akey{materials} 的键空间对下游是\emph{不区分来源}的 ——
+\pid{physics.polarization.ambacher} 读 \akey{p_sp_C_m2} 时
+并不知道也不关心它是内置值还是 DFT 值。这正是零改动替换得以成立的机制，
+也是为什么审计信息必须\emph{另开}一个 artifact（\akey{dft_provenance}）
+而不能混进材料库的键空间。
+
+\subsection*{小结}
+
+本章的结论可以概括为三点。
+
+其一，\textbf{本模块管理的不是常数，而是常数的可信度}。
+不确定度、收敛标志、出处字符串、表内容散列与覆盖报告，
+构成了一个可审计的先验，而"文献转录"这一身份被主动声明而非掩盖。
+
+其二，\textbf{红线必须在代码里。} "PBE 带隙不得进入器件模型"若只写在
+文档里，迟早会被一次便利的调用绕过；写成 \texttt{validate()} 的硬 issue
+之后，它成了一个不可绕过的门。
+
+其三，\textbf{零改动替换是可以被机械验收的。} 替换材料槽后，
+流水线只多一个阶段、下游模块的标识与版本逐一不变、同一 Deck 的指纹
+可复现、而物理量确实发生了落在合理带内的移动 —— 这四条合起来，
+才是"即插即用"的完整含义。
+
+\cleardoublepage

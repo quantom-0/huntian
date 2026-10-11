@@ -1,0 +1,189 @@
+% 总论第 3 章 —— 数据流与 artifact 契约
+
+\chapter{数据流与 artifact 契约}
+\label{ch:dataflow}
+\index{1concept@概念!artifact@数据通道}
+
+模块之间\textbf{从不互相 import}，只通过命名数据通道交换数据。
+本章记述这条通道的机制、它的全部内容（契约矩阵），以及三处
+"接口取舍的代价"—— 后者是本章最有价值的部分，因为接口设计的好坏
+只能在\emph{代价被量化}之后才能判断。
+
+\section{命名数据通道}
+\label{sec:data-context}
+
+\subsection{三个阶段式原语}
+
+一个模块从上下文读它需要的东西、写它产出的东西。写入时声明生产者，
+读取时若键不存在则报错：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.30\textwidth} p{0.60\textwidth}@{}}
+\toprule
+\textbf{原语} & \textbf{语义}\\
+\midrule
+\akey{require(key)} & 读一个必需的 artifact；缺失即抛异常\\
+\akey{get(key)} & 读一个可选的 artifact；缺失返回空值\\
+\akey{put(key, value, ...)} & 写 artifact，同时声明生产者、版本与元数据\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+契约的机械性在于：\textbf{下游只认键，不认实现}。
+这正是 \crefchap{ch:sp1d} 的替换只需改一行绑定的原因，
+也是 \crefchap{ch:dft} 的"零改动替换"验收能够成立的原因。
+
+\subsection{stage 作用域与溯源}
+
+模块执行时被包在一个 \texttt{stage} 作用域里，声明它的输入与输出：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.28\textwidth} p{0.62\textwidth}@{}}
+\toprule
+\textbf{记录项} & \textbf{内容}\\
+\midrule
+模块与版本 & \akey{module_id} 与 \akey{module_version}（即解析结果）\\
+状态 & 成功 / 失败\\
+耗时 & 该阶段的墙钟时间\\
+输入输出 & 声明过的 artifact 键\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+\index{1concept@概念!provenance@溯源}
+溯源不是装饰：\crefchap{ch:dft} 的 \akey{dft_provenance} 之所以能
+作为\emph{独立的 artifact} 存在，前提是上下文本身已经能记录
+"哪一步产出了什么"。
+
+\section{artifact 契约矩阵}
+\label{sec:data-matrix}
+
+\creftab{tab:data-matrix} 汇总了本文档当前版本的全部 artifact 键，
+以及它们的生产者与消费者。它是由九个模块的 \akey{produces}/\akey{requires}
+声明生成的，因此与代码同步是机械的。
+
+{\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}p{0.225\textwidth} p{0.235\textwidth} p{0.245\textwidth} p{0.215\textwidth}@{}}
+\caption{artifact 契约矩阵：每个键的生产者与消费者}\label{tab:data-matrix}\\
+\toprule
+\textbf{键} & \textbf{生产者} & \textbf{消费者} & \textbf{载体}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{键} & \textbf{生产者} & \textbf{消费者} & \textbf{载体}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\akey{structure} & Deck（种入） &
+  \pid{mesh.structured2d}, \pid{materials.dft},
+  \pid{physics.polarization.ambacher}, \pid{transport.dd} & 字典\\
+\akey{materials} & Deck 种入 \emph{或} \pid{materials.dft} &
+  \pid{physics.polarization.ambacher}, \pid{transport.dd} & \texttt{MaterialDB}\\
+\akey{dft_provenance} & \pid{materials.dft} & （审计，无消费者） & 字典\\
+\akey{mesh} & \pid{mesh.structured2d} & \pid{transport.dd} & 字典\\
+\akey{polarization} & \pid{physics.polarization.ambacher} &
+  \pid{physics.quantum.analytic_tw}, \pid{physics.quantum.sp1d},
+  \pid{transport.dd}, \pid{extract.fom} & 字典\\
+\akey{quantum} & \pid{physics.quantum.analytic_tw} \emph{或} \pid{physics.quantum.sp1d} &
+  \pid{extract.fom}, \pid{transport.dd}（可选初值） & 字典\\
+\akey{ns} & \pid{physics.quantum.analytic_tw}, \pid{physics.quantum.sp1d},
+  \pid{transport.dd} & \pid{extract.fom} & 标量\\
+\akey{electrostatics} & \pid{transport.dd} & （未来：\pid{extract.iv}） & 字典\\
+\akey{carriers} & \pid{transport.dd} & （未来：\pid{extract.iv}） & 字典\\
+\akey{current} & \pid{transport.dd} & （未来：\pid{extract.iv}） & 字典\\
+\akey{iv} & \pid{transport.dd} & （未来：\pid{extract.iv}） & 字典\\
+\akey{results.fom} & \pid{extract.fom} & 终端输出 & 字典\\
+\akey{gate}, \akey{temperature_K} & Deck & 多个模块 & 字典 / 标量\\
+\end{longtable}
+}
+
+\noindent
+读这张表有两种读法。\textbf{横向}看依赖：\akey{polarization} 是扇出最广的键
+（四个消费者），因此它的契约稳定性最重要。\textbf{纵向}看层级：
+从 Deck 种入的 \akey{structure}/\akey{materials} 出发，
+经 \akey{polarization} 分成"量子支"与"输运支"，
+最后由 \pid{extract.fom} 收敛到单一终端键。
+
+\section{三处接口取舍及其代价}
+\label{sec:data-tradeoffs}
+
+契约设计中最有信息量的部分不是"我们提供了什么"，而是
+"\emph{我们明知有代价、仍然这么选}"。本节记录三处，
+其中第一处的代价已被量化。
+
+\subsection{界面落位：两个模块的不一致是被接受的}
+
+\crefchap{ch:mesh} 产出的网格把层界放在\textbf{节点}上；
+\crefchap{ch:sp1d} 的量子求解器刻意构造网格把异质界面放在\textbf{面}上。
+两者对同一条物理界面给出了不同的离散表示。
+
+这不是疏忽，而是接口边界的取舍：网格模块产出的是\emph{几何}，
+供 \crefchap{ch:transport_dd} 的有限体积漂移扩散使用，后者按设计
+\emph{原样消费}给定网格，因此界面只能在节点上。
+
+代价是量化的：\crefchap{ch:transport_dd} 实测，由该网格解出的
+二维电子气面密度比极化给出的上界 $\sigeff/q$ 高约 $1.7$ 倍
+（界面附近一个单元的抹平）。同时，设计稿中"与一维 SP 的带边差
+$<1$\U{meV}"这条判据在本离散下\emph{原理上不可达}。
+
+\boundary{本条的教训是：\textbf{跨模块的接口取舍必须把代价写进文档，
+而不是留给读者去发现两章之间的叙述矛盾}。本文档在
+\crefchap{ch:mesh}（声明落位方式）、\crefchap{ch:sp1d}（声明相反方式）、
+\crefchap{ch:transport_dd}（量化代价）三处交叉引用，形成一条闭环线索。
+}
+
+\subsection{\akey{ns}：一个刻意冗余的标量键}
+
+\akey{ns} 与 \akey{quantum.ns_cm2} 携带同一个数。看似冗余，
+但它承担一个明确职责：让\emph{只需要面密度}的消费者不必依赖
+量子模型的完整契约。\crefchap{ch:transport_dd} 也产出 \akey{ns}
+（最后偏压点的值），因此 \pid{extract.fom} 既可以在平衡态流水线上
+工作，也可以在有偏压的流水线上工作，而它对上游的\emph{唯一}要求是
+"有人产出 \akey{ns}"。
+
+代价是可能出现两个不一致的 \akey{ns}。本文档的应对是：
+\pid{extract.fom} 的校验里有一条断言，要求 \akey{ns} 与
+\akey{quantum.ns_cm2} 在 $10^{-6}$ 相对误差内一致
+（\crefchap{ch:fom}）。\textbf{冗余可以接受，冗余的静默漂移不可以。}
+
+\subsection{场数组只记最后一个偏压点}
+
+\crefchap{ch:transport_dd} 的 \akey{electrostatics} 与 \akey{carriers}
+只携带\emph{最后}求解的偏压点的二维场，而\emph{每一个}偏压点的摘要
+都在 \akey{current} 里。理由是容量：二维场数组随偏压点数线性增长，
+全存会撑爆上下文；而"哪一点没收敛、为什么"这个诊断需求，
+用标量摘要就能满足。
+
+代价是：若使用者想比较两个偏压点的场分布，必须在 Deck 里把扫描
+拆成两次运行。这是一个被接受的使用限制，写在 \crefchap{ch:transport_dd}
+的接口一节。
+
+\section{契约演化的纪律}
+\label{sec:data-evolution}
+\index{1concept@概念!contract evolution@契约演化}
+
+由上述取舍可以总结出三条本文档遵循的契约纪律，
+它们是后续新增模块时必须遵守的：
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.4em,topsep=0.4em]
+  \item \textbf{契约键的语义只增不改。} 新增键是兼容的；
+        改变一个已有键的\emph{单位或含义}必须升主版本，
+        因为下游无法从值本身察觉这种变化。
+  \item \textbf{冗余键必须有一致性断言。} 见 \S\ref{sec:data-tradeoffs}
+        的 \akey{ns} 一例：允许冗余，但必须有测试锁住两者一致。
+  \item \textbf{审计信息另开 artifact，不混进数据契约。}
+        \crefchap{ch:dft} 的 \akey{dft_provenance} 是范例：
+        \akey{materials} 的键空间对下游是不区分来源的，
+        因此溯源必须\emph{另开}一个通道，否则下游模块会被迫理解
+        自己本不该关心的东西。
+\end{enumerate}
+
+第 3 条还可以反向表述，作为判断一个契约设计是否健康的标准：
+\textbf{如果一个下游模块需要知道"上游是谁"，那么契约设计就已经失败了。}
+
+\cleardoublepage

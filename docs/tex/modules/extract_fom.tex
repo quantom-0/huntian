@@ -1,0 +1,288 @@
+% module_id: extract.fom
+% module_version: 0.1.0
+% plugin_dir: plugins/extract_fom
+% source_files: plugins/extract_fom/__init__.py
+% tests: tests/test_plugins.py
+
+\chapter{电荷控制阈值与优值提取}
+\label{ch:fom}
+
+\begin{quote}
+\small
+\noindent\textbf{模块标识}\quad\pid{extract.fom}\qquad
+\textbf{版本}\quad 0.1.0\qquad
+\textbf{类别}\quad extract
+\end{quote}
+
+\noindent
+本章记述流水线的最后一个阶段：把算出的电荷状态打包成一份结果记录，
+并补上一个闭式的阈值电压估计。它的主要价值不在于算法难度 ——
+本章的公式都是代数的 —— 而在于两件事：一是把\textbf{结果契约}
+固定下来，二是把一个容易被误解的\textbf{分工事实}写在明处：
+本模块报告的阈值电压与量子模型\emph{无关}。
+
+\section{模块契约}
+\label{sec:fom-contract}
+\index{4module@模块!extract.fom}
+
+\begin{modulecard}{extract.fom}{0.1.0}
+  \cardrow{类别}{extract（结果提取，流水线阶段）}
+  \cardrow{能力}{extract, extract.fom}
+  \cardrow{依赖 artifact}{ns, quantum, polarization}
+  \cardrow{产出 artifact}{results.fom}
+  \cardrow{验证状态}{\textbf{unverified}（占位实现，见下）}
+  \cardrow{源码}{\fpath{plugins/extract_fom/}}
+  \cardrow{测试}{\fpath{tests/test_plugins.py}（阈值区间、电容区间、压降自洽、趋势）}
+  \cardrow{可标定参数}{\akey{vth_correction_V}\calib、\akey{interface_charge_cm2}\calib}
+  \cardrow{模型}{全耗尽电荷控制（闭式）、氧化层电容、热电压}
+\end{modulecard}
+
+本模块的验证状态是 \texttt{unverified}，且是\textbf{按设计如此}的。
+与其余八个模块不同，它没有闭式解可以对、没有收敛阶可以断言 ——
+它本身就是一个\emph{模型的闭式解}。因此它的"验证"只能是与实测阈值对比，
+而那需要 L2 基准（Id--Vg 实测），目前尚未进行。
+
+模块说明书对此的措辞值得原文保留：\emph{"这不是从真实 Id--Vg 扫描中提取
+$V_{\text{th}}$ 的替代品。它是电荷控制极限，作为一个有用的合理性锚点，
+以及完整 IV / C--V / S 参数提取链的占位。"}
+
+\section{模型：全耗尽电荷控制}
+\label{sec:fom-model}
+\index{1concept@概念!threshold voltage@阈值电压}
+
+\subsection{阈值电压}
+\label{sec:fom-vth}
+
+在"势垒层完全耗尽、沟道电荷恰好被耗尽掉"这一经典假定下，
+栅压需要同时承担三项：肖特基势垒、导带带阶，以及把极化面电荷
+$\sigeff$ 在厚度 $d$ 上降掉的电压。于是
+
+\begin{equation}
+\boxed{\;
+V_{\text{th}} \;=\; \phib \;-\; \dEc \;-\;
+\frac{\sigeff\,d}{\epsr\epsO}
+\;+\; V_{\text{corr}}
+\;}
+\label{eq:fom-vth}
+\end{equation}
+
+其中各项量纲一致：\crefeq{eq:fom-vth} 中两个能量项以 \U{eV} 计、
+其余以 \U{V} 计，二者数值相等，故不出现显式换算因子。
+$V_{\text{corr}}$ 是参数 \akey{vth_correction_V}（默认 $0$），
+一个吸收"电荷控制估计与实测阈值之差"的经验偏移。
+
+第二项与第三项之间有一个值得点明的分工：$\dEc$ 来自
+\emph{材料}（带隙差乘一个比例），而势垒压降来自\emph{静电}
+（面电荷乘厚度除以介电常数）。它们都是势垒层的性质。
+
+\subsection{势垒压降与氧化层电容}
+\label{sec:fom-cox}
+\index{2qty@物理量!oxide capacitance@氧化层电容}
+
+\crefeq{eq:fom-vth} 的第三项单独命名并写进结果记录：
+
+\begin{equation}
+V_{\text{drop}} \;=\; \frac{\sigeff\,d}{\epsr\epsO},
+\label{eq:fom-drop}
+\end{equation}
+
+它是本器件"极化电荷把势垒层压出多少电压"的直接度量 —— 演示器件下
+约 $3.76$\U{V}，是三项中最大的一项，也因此决定了阈值是负的。
+
+势垒层的单位面积电容为
+
+\begin{equation}
+C_{\text{ox}} \;=\; \frac{\epsr\epsO}{d},
+\label{eq:fom-cox}
+\end{equation}
+
+它在数值上是 $V_{\text{drop}}$ 与 $\sigeff$ 之间的换算系数
+（$V_{\text{drop}}=\sigeff/C_{\text{ox}}$）。本模块把它也写进契约，
+因为它是后续跨导与频率特性的基本量：$g_m$ 的第一近似就是
+$C_{\text{ox}}W v_{\text{sat}}$ 量级。
+
+热电压同样作为诊断量输出：
+
+\begin{equation}
+V_T \;=\; \frac{kT}{q}.
+\label{eq:fom-vt}
+\end{equation}
+
+\subsection{面密度的界面电荷修正}
+
+真实的界面存在固定的净电荷，它们会抵消一部分二维电子气。
+本模块用一个显式参数处理：
+
+\begin{equation}
+\ns^{\text{rep}} \;=\; \ns^{\text{quantum}} \;-\; n_{\text{int}},
+\label{eq:fom-ns}
+\end{equation}
+
+$n_{\text{int}}$ 为参数 \akey{interface_charge_cm2}（默认 $0$）。
+同时保留未修正值 \akey{ns_uncorrected_cm2}，使这一处修正始终可被
+审计 —— 若只报告修正后的数，"到底改了多少"就无从追查。
+
+\section{一个必须写在明处的分工事实}
+\label{sec:fom-division}
+\index{1concept@概念!model independence@模型无关性}
+
+本模块报告两个数：$V_{\text{th}}$ 与 $\ns$。它们来自\emph{不同的}模型，
+且只有后者经过量子求解：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.20\textwidth} p{0.34\textwidth} p{0.36\textwidth}@{}}
+\toprule
+\textbf{量} & \textbf{来自} & \textbf{对量子模型的依赖}\\
+\midrule
+$V_{\text{th}}$ & \crefeq{eq:fom-vth}，只依赖势垒静电学 &
+  \textbf{无}。把量子槽从解析三角阱换成自洽 SP，$V_{\text{th}}$ 一个字都不变\\
+$\ns$ & \akey{quantum} artifact 的 \akey{ns_cm2} &
+  完全依赖。\crefchap{ch:analytic_tw} 与 \crefchap{ch:sp1d} 给出的值
+  相差约 $5\%$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+这一事实有一个具体的验收后果：在 \crefchap{ch:sp1d} 的即插即用替换中，
+下游 \pid{extract.fom} 之所以"一行未改"，正是因为它只认 artifact 键
+而不认实现（\crefchap{ch:sp1d}）。而\emph{另一个}后果是使用上的：
+读者不应把本模块的 $V_{\text{th}}$ 当作量子模型的输出 ——
+它对量子模型的改进\emph{完全不敏感}。把它写上契约，是为了防止
+一个看似合理的误解：看到 $V_{\text{th}}$ 与 $\ns$ 在同一个记录里，
+就以为它们来自同一次自洽求解。
+
+\section{验证与基准}
+\label{sec:fom-verification}
+
+\begin{veriftable}{阈值、电容与压降的自洽性与趋势}{tab:fom-verify}
+\vgroup{自洽性}
+\vrow{压降与电荷控制关系一致}{\crefeq{eq:fom-drop} 复现报告的压降}{
+  精确到 $10^{-6}$（用 artifact 中的 $\sigeff$、$d$、$\epsr$ 复算）}
+\vrow{面密度与量子 artifact 一致}{\akey{ns} 等于 \akey{quantum.ns_cm2}}{
+  精确到 $10^{-6}$ 相对}
+\vgroup{量级合理性}
+\vrow{阈值落在物理区间}{$-5<V_{\text{th}}<-1$\U{V}}{演示器件 $-3.43$\U{V}}
+\vrow{氧化层电容落在物理区间}{$0.2<C_{\text{ox}}<0.8$\U{\textmu F/cm^2}}{
+  演示器件 $0.410$\U{\textmu F/cm^2}}
+\vgroup{趋势方向}
+\vrow{屏蔽增强 $\Rightarrow$ 阈值更负}{单调减}{
+  $s:0.6\to0.9$ 时 $V_{\text{th}}$ 更低}
+\vnote{区间判据（而非等值判据）在这里是恰当的：本模块的验证状态是
+      \texttt{unverified}，它的常数是占位的，因此只能断言"落在量级
+      合理的带内"与"与其他量自洽"。等值断言留给 L2 基准。}
+\end{veriftable}
+
+\subsection{演示器件的算例}
+\label{sec:fom-worked}
+
+\creftab{tab:fom-worked} 给出演示器件（Al$_{0.25}$Ga$_{0.75}$N，$20$\U{nm} 势垒，
+$s=0.8$，$\phib=0.94$\U{eV}）逐项代入的结果。全部中间量都可由
+前几章的 artifact 复算。
+
+\begin{veriftable}{演示器件的阈值链逐步计算}{tab:fom-worked}
+\vrow{势垒压降 $V_{\text{drop}}$，\crefeq{eq:fom-drop}}{$<5$\U{V}}{$3.762$\U{V}}
+\vrow{导带带阶 $\dEc$（比例 $0.7$）}{---}{$0.6055$\U{eV}}
+\vrow{肖特基势垒高度 $\phib$（取自 Deck）}{---}{$0.940$\U{eV}}
+\vrow{阈值电压 $V_{\text{th}}$，\crefeq{eq:fom-vth}}{$-5<V_{\text{th}}<-1$\U{V}}{
+  $-3.428$\U{V}}
+\vrow{氧化层电容 $C_{\text{ox}}$，\crefeq{eq:fom-cox}}{$0.2$--$0.8$\U{\textmu F/cm^2}}{
+  $0.410$\U{\textmu F/cm^2}}
+\vrow{热电压 $V_T$（$300$\U{K}）}{---}{$25.85$\U{mV}}
+\vnote{压降是第一项的量级主导者：三项中 $3.762$ 远大于 $0.940$ 与 $0.6055$，
+      这正是常关型与常开型 GaN HEMT 之间的分界线所在 ——
+      增大 $\sigeff d/(\epsr\epsO)$（更厚的势垒或更强的极化）
+      会把阈值推得\emph{更负}，即器件更深地处于常开状态。}
+\end{veriftable}
+
+\section{误差来源与适用边界}
+\label{sec:fom-limits}
+\index{1concept@概念!validity limits@适用边界}
+
+\limitsheading
+
+\begin{bounds}
+  \item \textbf{本模块是占位实现，验证状态为 \texttt{unverified}。}
+        它的 $V_{\text{th}}$ 是电荷控制极限，不是从 Id--Vg 扫描提取的阈值。
+        两者在有短沟效应、界面态或串联电阻的真实器件上会明显不同。
+
+  \item \textbf{全耗尽假定不总成立。} 势垒层未被完全耗尽时
+        （例如极厚势垒或栅压过正），\crefeq{eq:fom-vth} 的线性关系失效。
+
+  \item \textbf{$V_{\text{th}}$ 与量子模型无关。} 见
+        \S\ref{sec:fom-division}。这不是缺陷，但必须被知道，
+        否则会误以为改进量子求解器会改进阈值。
+
+  \item \textbf{无串联电阻、无短沟效应、无陷阱色散。}
+        源漏接入区电阻、漏致势垒降低、界面态导致的阈值漂移
+        一概不在模型内。
+
+  \item \textbf{$V_{\text{th}}$ 的绝对精度受制于输入常数。}
+        $\phib$（源自 Deck 或解析拟合）、$\dEc$（比例 $0.7$ 是模型选择）、
+        以及 $\sigeff$（依赖未标定的屏蔽因子）三者共同决定它。
+        在 L2 之前，这个数的可信度不高于它的输入。
+
+  \item \textbf{栅电流不参与。} \akey{ig_A_per_m} 由构造为零
+        （\crefchap{ch:transport_dd} 无栅泄漏路径），
+        因此本模块无从给出与栅相关的优值。
+
+  \item \textbf{没有真正的优值链。} 完整的提取链（IV、C--V、S 参数、
+        $g_m$、$f_T$、$f_{\max}$）尚未实现；本模块只固定了
+        \akey{results.fom} 这个契约位置。
+\end{bounds}
+
+\section{接口契约与小结}
+\label{sec:fom-interface}
+\index{5artifact@数据通道!results.fom}
+
+{\small
+\begin{longtable}{@{}p{0.06\textwidth} p{0.22\textwidth} p{0.62\textwidth}@{}}
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+入 & \akey{quantum} & \akey{ns_cm2}, \akey{phi_b_eV}, \akey{delta_ec_eV}, \akey{ef_eV}\\
+入 & \akey{ns} & 标量面密度（\U{cm^{-2}}），用于与 \akey{quantum} 的一致性核对\\
+入 & \akey{polarization} & \akey{barrier_thickness_nm}, \akey{eps_r_barrier},
+  \akey{sigma_eff_C_m2}, \akey{sigma_pol_cm2}, \akey{sigma_eff_cm2},
+  \akey{screening}, \akey{x_al}\\
+出 & \akey{results.fom} &
+  \akey{ns_cm2}, \akey{ns_uncorrected_cm2}, \akey{vth_est_V},
+  \akey{barrier_drop_V}, \akey{phi_b_eV}, \akey{delta_ec_eV}, \akey{ef_eV},
+  \akey{cox_F_m2}, \akey{cox_uF_cm2}, \akey{thermal_voltage_V},
+  \akey{temperature_K}, 以及从极化透传的 $\sigpol$、$\sigeff$、屏蔽因子、
+  Al 组分与势垒厚度\\
+\end{longtable}
+}
+
+\noindent
+把 $\sigpol$、$\sigeff$、$s$、$x$、$d$ 一并透传进结果记录，是为了让
+\emph{最终报告可以自证}：读者拿到一份 \akey{results.fom}，
+无须回头翻别的 artifact 就能复算 $V_{\text{th}}$ 与 $C_{\text{ox}}$。
+这也正是 \creftab{tab:fom-worked} 的算例得以逐行核对的原因。
+
+\subsection*{小结}
+
+本章的结论可以概括为三点。
+
+其一，\textbf{公式简单不等于结论简单。} \crefeq{eq:fom-vth} 只有三项，
+但第一项的绝对精度依赖未标定的屏蔽因子，第二项依赖一个模型比例，
+第三项依赖材料常数 —— 因此它的\emph{趋势}可信，\emph{数值}待标定。
+
+其二，\textbf{分工必须在契约里写明。} $V_{\text{th}}$ 与 $\ns$ 出自
+不同模型、对量子求解器的敏感度截然不同；把它们放在同一条记录里
+并不构成它们同源的证据。本章把这件事写成一张表（\S\ref{sec:fom-division}）
+而不是一句脚注。
+
+其三，\textbf{占位实现也要有名字和被断言的性质。}
+本模块的 \texttt{unverified} 状态、区间判据、以及与上游 artifact 的
+自洽性断言，共同保证了它即便只是占位，也\emph{不会悄悄给出
+自相矛盾的结果} —— 这比"假装它已经验证过"要有用得多。
+
+\cleardoublepage

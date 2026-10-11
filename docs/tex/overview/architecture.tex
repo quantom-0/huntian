@@ -1,0 +1,263 @@
+% 总论第 2 章 —— 系统架构
+
+\chapter{系统架构：模块即插件、服务即插件}
+\label{ch:architecture}
+\index{1concept@概念!plugin architecture@插件架构}
+
+本章记述承载全部物理模型的那套骨架。它回答的问题是：
+\emph{为什么九个功能差异极大的模块（从网格生成到稠密线性代数）
+能共享同一套装配、调度与校验机制}。
+
+答案由三条地基构成，它们各自只做一件事，且都\emph{不含任何物理}：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.20\textwidth} p{0.30\textwidth} p{0.42\textwidth}@{}}
+\toprule
+\textbf{地基} & \textbf{职责} & \textbf{不做什么}\\
+\midrule
+注册中心 & 发现、版本、依赖、参数校验、热插拔 & 不调度、不执行\\
+SimContext & 命名数据通道、溯源、指纹 & 不解释数据内容\\
+流水线 & 由 manifest 推导执行顺序 & 不硬编码任何模块\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{模块契约}
+\label{sec:arch-contract}
+\index{1concept@概念!manifest@模块清单}
+
+一个模块就是一个实现了 \texttt{IModule} 的类，外加一份\textbf{声明}：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.24\textwidth} p{0.66\textwidth}@{}}
+\toprule
+\textbf{字段} & \textbf{含义与它在本文档中的作用}\\
+\midrule
+\akey{module_id} & 点分小写标识，至少两段（如 \pid{physics.quantum.sp1d}）。
+  与章首模块卡片逐字符一致\\
+\akey{module_version} & 语义化版本。数值行为改变必须升版本（见 \S\ref{sec:arch-fingerprint}）\\
+\akey{api_version} & 接口版本；主版本不匹配时\emph{拒绝加载}\\
+\akey{category} & \akey{mesh} / \akey{physics} / \akey{transport} / \akey{extract} / \akey{solver}\\
+\akey{capabilities} & 能力标签，供槽位契约检查（如 \texttt{quantum}、\texttt{linear}）\\
+\akey{requires} & 需要的 artifact 键。\textbf{这是调度边的唯一来源}\\
+\akey{produces} & 产出的 artifact 键。服务模块此字段为空\\
+\akey{parameters} & 参数规格表：类型、默认值、范围、单位、是否可标定、出处\\
+\akey{verification} & \texttt{verified} / \texttt{partially-verified} / \texttt{unverified}\\
+\akey{tags}, \akey{author}, \akey{description} & 元数据\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+三个字段值得单独说明，因为它们在本文档中反复出现。
+
+\textbf{（i）\akey{requires}/\akey{produces} 同时是文档结构。}
+本文档第 3 章的 artifact 契约矩阵就是从这两列生成的；
+它也解释了为什么 \crefchap{ch:dft} 的模块"依赖 \akey{structure} 却从不读它"——
+那条依赖声明的唯一作用是\emph{把自己排到极化与量子之前}。
+
+\textbf{（ii）\akey{verification} 是一个\emph{三值}标签，不是一个百分比。}
+模块说明书里没有"完成度 80\%"这种说法：要么有闭式解或收敛阶证据
+（\texttt{partially-verified}），要么已在独立基准上标定通过
+（\texttt{verified}），要么是占位实现（\texttt{unverified}）。
+本文档各章的卡片沿用同一取值。
+
+\textbf{（iii）\akey{parameters} 里 \akey{calibratable} 的含义是"允许被拟合"。}
+\crefchap{ch:dft} 的模块\textbf{没有任何}可标定参数，且这一条被测试固化为断言；
+其理由是方法论上的：数值方法的选择（截断能、$k$ 点密度）不应该被
+自动拟合循环挪动，否则标定与收敛性会混为一谈。
+
+\section{注册中心}
+\label{sec:arch-registry}
+
+\subsection{发现与加载}
+
+注册中心扫描 \fpath{plugins/} 目录（支持\emph{多文件插件包}，
+包内可用相对导入），或按点分导入路径加载。一条重要的工程性质是：
+\textbf{单个插件损坏不会中断整轮发现} —— 一个语法错误的插件只会让它
+自己缺席，其余模块照常可用。对由自动化层驱动的系统，这条性质是必要的：
+一次失败的插件生成不应该让整个工作台不可用。
+
+\subsection{版本：共存、钉住与语义}
+\label{sec:arch-version}
+\index{1concept@概念!semantic versioning@语义化版本}
+
+同一 \akey{module_id} 可以\textbf{同时注册多个版本}，旧版本不会被覆盖。
+这不是可有可无的：\crefchap{ch:sp1d} 的 Jacobian 精确化把模块从
+1.1.0 升到 1.1.1，而验证过的 Deck 钉住的是 \texttt{\^{}1.0.0}。
+两个版本必须能共存，旧结果才永远可复现。
+
+依赖范围支持五种写法，其语义见 \creftab{tab:arch-spec}。
+
+\begin{veriftable}{版本范围语法}{tab:arch-spec}
+\vrow{\texttt{>=1.0,<2.0}}{交集（逗号即 AND）}{两个条件同时满足}
+\vrow{\texttt{\^{}1.2.3}}{允许 $1.x$ 的小版本升级，只挡主版本}{
+  \texttt{\^{}1.0.0} \emph{会}解析到 $1.1.1$}
+\vrow{\texttt{\textasciitilde1.2}}{只允许补丁级}{$1.2.x$}
+\vrow{\texttt{a|b}}{并集（OR）}{任一满足}
+\vrow{\texttt{*}}{任意版本}{用于非关键的辅助模块}
+\vnote{第二行是本文档反复强调的一个语义细节：\textbf{"钉住"}钉住的到底是什么。
+      \texttt{\^{}1.0.0} 允许小版本升级，所以它\emph{不能}阻止数值行为的
+      变化 —— 那必须靠主版本号表达。\crefchap{ch:sp1d} 记录了这一点。}
+\end{veriftable}
+
+\subsection{依赖解析}
+
+解析做三件事：\emph{拓扑排序}、\emph{环检测}、\emph{版本冲突检测}。
+三者都是"在加载阶段就把错误暴露出来"，而不是等到运行到一半才发现
+某个协作者版本不对。
+
+\subsection{参数校验：给自动化层设的闸门}
+\label{sec:arch-params}
+
+未知参数、越界值、类型错误一律拒绝，并且对疑似拼写错误给出提示。
+本文档把这条机制称为\textbf{"LLM 生成配置的安全闸门"}：
+在"生成 $\to$ 校验 $\to$ 带着错误信息重试"的闭环里，
+一个\emph{确定性的}拒绝比一段自然语言的建议有用得多。
+
+\subsection{热插拔}
+\index{1concept@概念!hot plug@热插拔}
+
+运行中可以注册新版本，而\textbf{已经创建的实例继续使用它被创建时的版本}。
+因此"升级模块"是一个显式动作（改 Deck 绑定），而不是一次静默的全局替换。
+
+\section{服务即插件}
+\label{sec:arch-services}
+\index{1concept@概念!service slot@服务槽}
+
+\subsection{两类模块}
+
+大多数模块是\emph{数据阶段}：读 artifact、写 artifact，由流水线排序。
+另有一类是\emph{库模块} —— 非线性求解器、线性求解器、计算后端 ——
+它们不转换任何上下文、不产出任何 artifact，但会被\emph{另一个模块内部}
+需要。
+
+后者通过上下文上的 \texttt{ServiceRegistry} 按需解析，而 Deck 仍然配置它们，
+位置是专属的\emph{服务槽}：
+
+\begin{equation}
+\text{服务槽} \in \{\ \akey{backend},\ \akey{nonlinear},\ \akey{linear}\ \}.
+\label{eq:arch-service-slots}
+\end{equation}
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.16\textwidth} p{0.20\textwidth} p{0.56\textwidth}@{}}
+\toprule
+\textbf{槽} & \textbf{要求能力} & \textbf{本文档中的实现}\\
+\midrule
+\akey{nonlinear} & \texttt{nonlinear} & \pid{nonlinear.newton}（\crefchap{ch:newton}）\\
+\akey{linear} & \texttt{linear} & \pid{linear.blocktridiag}（\crefchap{ch:blocktridiag}）\\
+\akey{backend} & \texttt{backend} & 未实现（预留给计算后端）\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{解析语义}
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.28em,topsep=0.35em]
+  \item \textbf{惰性}：首次 \texttt{get()} 时才建实例；
+  \item \textbf{按配置缓存}：缓存键为
+        $(\text{模块标识} \mid \text{版本} \mid \text{规范化参数})$，
+        因此同一模块的两组参数会得到两个独立实例 —— 否则后一次调用会
+        静默继承前一次的配置；
+  \item \textbf{调用方可覆盖}：物理模块传入的参数覆盖 Deck 槽里的同名参数。
+        这正是物理模块注入\emph{自己量纲}的容差的方式
+        （\crefchap{ch:sp1d} 传的是以 \U{eV} 计的容差）；
+  \item \textbf{可软解析}：\texttt{required=False} 时缺失返回空值而不是抛错，
+        供可选协作者使用；
+  \item \textbf{可统一释放}：\texttt{release\_all()} 逐个终止，
+        单个失败不阻断其余。
+\end{itemize}
+
+\subsection{为什么值得这么做}
+
+\crefeq{eq:arch-service-slots} 的设计后果是：
+\textbf{换迭代策略与换物理模型是同一种操作} —— 改 Deck 里的一行绑定。
+一个未来的 Krylov 或信赖域求解器只要声明 \akey{nonlinear} 能力、
+暴露同样的 \texttt{solve()} 就能顶上，物理模块一行不用改。
+
+这不是设想：本文档记录了三处真实的替换验收，见 \S\ref{sec:arch-acceptance}。
+
+\section{流水线：顺序由数据推导}
+\label{sec:arch-pipeline}
+\index{1concept@概念!pipeline@流水线}
+
+执行顺序\textbf{不由槽位表决定，而由 manifest 推导}：
+若模块 $\mathcal{A}$ 产出的 artifact 是模块 $\mathcal{B}$ 所需要的，
+则 $\mathcal{A}$ 必在 $\mathcal{B}$ 之前。槽位顺序只做\emph{平局裁决}
+（当两个模块之间没有数据依赖时，按槽位表的固定顺序排列）。
+
+这条规则有一个可以被观察到的后果：把 \akey{materials} 槽从内置库换成
+\pid{materials.dft}（\crefchap{ch:dft}）之后，流水线\emph{多出一个阶段}
+并排在首位，而其余阶段的相对顺序\emph{一个都没动}。
+这不是特例处理的结果，而是"顺序由数据推导"的必然。
+
+\section{Deck：两级校验}
+\label{sec:arch-deck}
+\index{1concept@概念!deck@配置清单}
+
+Deck 是描述一次仿真活动的声明式文档。它的校验分两级，
+这一分法的动机与参数校验相同 —— 服务于自动化闭环：
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.35em,topsep=0.4em]
+  \item \textbf{结构校验}（构造时抛 \texttt{SchemaError}）：
+        类型、范围、必填、跨字段规则；未知字段一律拒绝并给拼写提示。
+  \item \textbf{上下文校验}（返回 \texttt{(errors, warnings)} 而\emph{不抛异常}）：
+        插件是否存在、版本是否可满足、参数是否为该插件已知、
+        材料名是否可解析、\emph{artifact 是否可达}。
+\end{enumerate}
+
+第二级返回 issue 列表而不是抛异常，是刻意的：
+调用方（尤其是一个自动化的生成器）需要拿到\emph{完整}的错误清单
+一次性修正，而不是被迫玩"改一个、再撞下一个"的游戏。
+
+\section{架构假设的验收}
+\label{sec:arch-acceptance}
+
+一套架构主张只有在被\emph{替换}检验过之后才算数。本文档记录了三处：
+
+\begin{veriftable}{三处即插即用替换及其验收}{tab:arch-acceptance}
+\vrow{\textbf{量子模型}}{解析三角阱 $\to$ 自洽 SP}{
+  只改 Deck 一行；下游 \pid{extract.fom} 零改动；
+  版本钉住生效（\crefchap{ch:sp1d}）}
+\vrow{\textbf{材料库}}{内置库 $\to$ DFT 覆盖}{
+  流水线只多一个阶段且排在首位，其余顺序不动；
+  同一 Deck 两次运行指纹一致（\crefchap{ch:dft}）}
+\vrow{\textbf{线性步}}{SciPy 稀疏（设计稿）$\to$ 纯 NumPy 块三对角}{
+  经 \akey{linear} 槽解析；\pid{transport.dd} 的物理代码未因此改动
+  （\crefchap{ch:blocktridiag}）}
+\vnote{第一处的意义最强：它同时证明了能力契约、artifact 契约与版本钉住
+      三件事。第三处则是"零第三方依赖"这一约束下的被迫替换，
+      恰好反过来验证了服务槽的存在价值。}
+\end{veriftable}
+
+\section{指纹：可复现性的定义}
+\label{sec:arch-fingerprint}
+
+一次运行的\emph{指纹}是如下内容的稳定散列（前 16 位十六进制）：
+
+\begin{equation}
+\text{fp} \;=\; \mathrm{hash}_{16}\bigl(
+\underbrace{\text{参数}}_{\text{Deck 快照}},\
+\underbrace{\text{模块版本}}_{\text{解析结果}},\
+\underbrace{\text{材料库指纹}}_{\text{内容散列}},\
+\underbrace{\text{标记}}_{\text{调用方注解}}\bigr).
+\label{eq:arch-fingerprint}
+\end{equation}
+
+\textbf{刻意的缺失：artifact 的数值不进指纹。}
+这不是疏忽，而是一条重要的语义约定：指纹回答的是
+"\emph{算了什么}"，而不是"\emph{算出了什么}"。
+因此当数值行为发生变化时，指纹\emph{不会}自动改变 ——
+它必须通过\textbf{升版本号}来表达。\crefchap{ch:sp1d} 记录了这条约定的
+一次真实应用：Jacobian 精确化使 self-consistent 指纹从
+\texttt{c26cb881f33c000c} 变为 \texttt{9d716641ad967853}，
+而这只是因为模块版本从 1.1.0 升到了 1.1.1。
+
+把这条约定写在总论里，是因为它容易被误用：若期待指纹能捕获数值漂移，
+就会漏掉"忘了升版本"这一类错误。指纹保证的是\emph{同样的输入与同样的
+版本给出同样的东西}，不是\emph{代码没变}。
+
+\cleardoublepage

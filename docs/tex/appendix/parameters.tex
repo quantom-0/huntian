@@ -1,0 +1,128 @@
+% 附录 B —— 可标定参数总表
+
+\chapter{可标定参数总表}
+\label{app:parameters}
+
+本附录列出全部标记为\emph{可标定}的参数。它们的共同性质是：
+默认值未经 L2 基准（霍尔 / XRD / C--V 实测）验证，使用前必须自行标定。
+凡未列入本表的参数都是\emph{数值或几何选择}，不应被自动拟合循环挪动。
+
+\section{总表}
+
+{\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}p{0.045\textwidth} p{0.175\textwidth} p{0.28\textwidth}
+                    p{0.075\textwidth} p{0.135\textwidth} p{0.18\textwidth}@{}}
+\toprule
+\textbf{章} & \textbf{模块} & \textbf{参数} & \textbf{默认} & \textbf{单位} & \textbf{取值依据（录自 MANIFEST）}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{章} & \textbf{模块} & \textbf{参数} & \textbf{默认} & \textbf{单位} & \textbf{取值依据（录自 MANIFEST）}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+8 & \pid{physics.polarization.ambacher} & \akey{screening} & $0.8$ & --- &
+  \textbf{无公认取值}；未被屏蔽的理论值在实践中高估面密度，须用霍尔数据标定\\
+8 & 同上 & \akey{relaxed_fraction} & $1.0$ & --- &
+  默认假定赝晶生长；除非 TEM/XRD 另有结论\\
+\midrule
+9 & \pid{physics.quantum.analytic_tw} & \akey{phi_b_0_eV} & $0.84$ & \U{eV} &
+  Ni/AlGaN 势垒拟合 $\phib\approx0.84+0.39x$\\
+9 & 同上 & \akey{phi_b_x_eV} & $0.39$ & \U{eV} & 同上\\
+9 & 同上 & \akey{delta_ec_ratio} & $0.7$ & --- &
+  常用值 $0.7$；实验报道约跨 $0.7$--$1.0$\\
+9 & 同上 & \akey{gamma0_eV_m43} & $2.123\times10^{-12}$ & \U{eV\cdot m^{4/3}} &
+  GaN 的三角阱预因子，取自文献 \cite{ambacher2000}\\
+\midrule
+10 & \pid{physics.quantum.sp1d} & \akey{phi_b_0_eV} & $0.84$ & \U{eV} & 同第 9 章\\
+10 & 同上 & \akey{phi_b_x_eV} & $0.39$ & \U{eV} & 同第 9 章\\
+10 & 同上 & \akey{delta_ec_ratio} & $0.7$ & --- & 同第 9 章\\
+10 & 同上 & \akey{gate_bias_V} & $0.0$ & \U{V} & 平衡态求解所处的栅偏压\\
+\midrule
+11 & \pid{transport.dd} & \akey{temperature_K} & $300.0$ & \U{K} &
+  等温晶格温度；热耦合属未来工作\\
+11 & 同上 & \akey{mu0_cm2_Vs} & $1500.0$ & \U{cm^2/(V\cdot s)} &
+  \textbf{占位值}，待迁移率插件与霍尔标定\\
+11 & 同上 & \akey{vsat_cm_s} & $2.0\times10^{7}$ & \U{cm/s} &
+  \textbf{占位值}，同上；非正值退回常数迁移率\\
+11 & 同上 & \akey{delta_ec_ratio} & $0.7$ & --- &
+  仅在无量子模块提供 $\dEc$ 时使用\\
+\midrule
+12 & \pid{extract.fom} & \akey{vth_correction_V} & $0.0$ & \U{V} &
+  吸收电荷控制估计与实测阈值之差的经验偏移\\
+12 & 同上 & \akey{interface_charge_cm2} & $0.0$ & \U{cm^{-2}} &
+  从二维电子气面密度中扣除的净固定界面电荷\\
+\end{longtable}
+}
+
+\section{两个零与一个"无"}
+
+表中有三处值得强调的取值，它们都是方法论上的选择而非疏漏。
+
+\subsection*{\pid{materials.dft}：一个可标定参数都没有}
+
+第 7 章的模块\textbf{没有任何可标定参数}，且这一条被测试固化为断言
+（\akey{calibratable_params()} 返回空元组）。理由是：
+\akey{ecut_wfc_ry}、\akey{kspacing_1_A}、\akey{pseudopotential_family}
+这些量是\emph{数值方法的选择}，不是器件的物理参数。若允许自动拟合循环
+去调整它们，就等于\emph{为了对上数据而调网格} —— 那会把标定与
+收敛性混为一谈，并且系统性地破坏两者的可信度。
+
+\subsection*{\pid{extract.fom}：两个零}
+
+\akey{vth_correction_V} 与 \akey{interface_charge_cm2} 默认为 $0$，
+含义是"暂时不修正"。这两个参数的存在本身就是一种诚实：
+它们承认电荷控制估计与实测阈值之间\emph{必然}存在差异，
+并把差异\emph{显式地}放在一个可标定位置上，
+而不是把它藏进某个物理常数里。
+
+\subsection*{$\akey{vth}$ 与 $\ns$ 的可标定性不对称}
+
+第 12 章记录了一个容易被误解的事实：本模块报告的阈值电压
+\emph{只依赖势垒静电学}，与量子模型无关；只有面密度来自量子求解。
+因此若用霍尔数据标定 $\ns$，受影响的参数在
+第 8 章（\akey{screening}）；而标定 $V_{\text{th}}$ 影响的是
+第 12 章的两个参数。\textbf{两类标定针对不同的参数，不应混做一次。}
+
+\section{标定的建议顺序}
+
+基于依赖关系与不确定度大小，建议的标定顺序是：
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.4em,topsep=0.4em]
+  \item \textbf{\akey{screening}（第 8 章）} —— 它是极化链上
+        最大的不确定度来源，且直接影响 $\ns$ 与 $V_{\text{th}}$ 两侧；
+  \item \textbf{\akey{mu0_cm2_Vs} 与 \akey{vsat_cm_s}（第 11 章）} ——
+        它们不影响平衡态电荷，只影响电流量级与饱和行为，
+        因此可以在电荷标定之后独立进行；
+  \item \textbf{\akey{vth_correction_V} 与 \akey{interface_charge_cm2}
+        （第 12 章）} —— 在前两步之后，用 Id--Vg 实测收尾；
+  \item \textbf{\akey{relaxed_fraction}、\akey{delta_ec_ratio}、
+        \akey{gamma0_eV_m43}} —— 这三者应当优先用\emph{结构}表征
+        （XRD、TEM）与文献共识确定，而不是用器件电学数据反推。
+\end{enumerate}
+
+最后一条尤其重要：$f_{\text{relax}}$ 与 $r$ 都是可以用非电学手段
+独立确定的量。用电学数据去反推它们，会让多个参数吸收同一个误差，
+从而失去可解释性。
+
+\section{未列入本表的参数}
+
+以下参数\emph{不}应被标定，各章已给出理由：
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.28em,topsep=0.35em]
+  \item \textbf{网格参数}（\akey{nx}、\akey{target_spacing_nm} 等）：
+        属于离散分辨率，应通过收敛性研究确定（\crefchap{ch:mesh}）；
+  \item \textbf{迭代控制参数}（\akey{max_iterations}、\akey{tolerance}、
+        \akey{max_step_V}、\akey{ptc_tau0_s} 等）：
+        属于数值选择，只影响收敛路径与代价（\crefchap{ch:newton}、
+        \crefchap{ch:transport_dd}）；
+  \item \textbf{DFT 数值设置}（\akey{ecut_wfc_ry}、\akey{kspacing_1_A}、
+        \akey{pseudopotential_family}）：属于方法选择，
+        且被陈旧判据保护（\crefchap{ch:dft}）；
+  \item \textbf{\akey{density_clamp}}：默认关闭的数值守卫，
+        其理由是数值的而非物理的（\crefchap{ch:sp1d}）。
+\end{itemize}
+
+\cleardoublepage

@@ -1,0 +1,688 @@
+% module_id: transport.dd
+% module_version: 0.1.0
+% plugin_dir: plugins/transport_dd
+% source_files: plugins/transport_dd/{__init__,plugin,physics,assemble,newton}.py
+% tests: tests/test_transport_dd.py
+
+\chapter{稳态漂移扩散输运}
+\label{ch:transport_dd}
+
+\begin{quote}
+\small
+\noindent\textbf{模块标识}\quad\pid{transport.dd}\qquad
+\textbf{版本}\quad 0.1.0\qquad
+\textbf{类别}\quad transport
+\end{quote}
+
+\noindent
+本章记述电荷\emph{如何流动}。前面的极化与量子模块回答了"电荷从哪来"，
+给出一个平衡态的电荷分布；本模块把它扩展成\emph{带偏压}的问题：
+在结构化二维网格上联立求解静电 Poisson 方程与电子连续性方程，
+扫过栅、漏偏压，产出电流--电压曲线。
+
+这是全流水线中数值上最重的一章。它的未知量数是前几章的
+$O(10^{4})$ 倍，Jacobian 是块三对角的，求解过程需要三层递进的
+保险机制才不至于发散。相应的，它的验证也最系统：六个级别的基准
+（T0--T5）全部先于任何"像不像器件"的检查。
+
+\section{模块契约}
+\label{sec:dd-contract}
+\index{4module@模块!transport.dd}
+
+\begin{modulecard}{transport.dd}{0.1.0}
+  \cardrow{类别}{transport（输运求解，流水线阶段）}
+  \cardrow{能力}{transport, transport.dd, current, iv}
+  \cardrow{依赖 artifact}{mesh, structure, materials, polarization}
+  \cardrow{产出 artifact}{electrostatics, carriers, current, iv}
+  \cardrow{验证状态}{partially-verified}
+  \cardrow{源码}{\fpath{plugins/transport_dd/}（多文件插件包）}
+  \cardrow{测试}{\fpath{tests/test_transport_dd.py}}
+  \cardrow{可标定参数}{\akey{temperature_K}\calib、\akey{mu0_cm2_Vs}\calib、
+    \akey{vsat_cm_s}\calib、\akey{delta_ec_ratio}\calib}
+  \cardrow{协作者}{经 Deck 的 \akey{linear} 槽解析 \pid{linear.blocktridiag}
+    （\crefchap{ch:blocktridiag}）}
+  \cardrow{模型范围}{稳态、等温、单极（仅电子）}
+\end{modulecard}
+
+本模块为何是 \texttt{partially-verified} 而不是 \texttt{unverified}，
+以及为何还不是 \texttt{verified}，模块说明书自己给出了判据：
+设计稿原本的门槛是"T0--T4 全部通过之前保持 unverified"，它们确实通过了
+（均匀电阻闭式解、制造解二阶收敛、端点电流连续性、延拓无关性）；
+而阻止它升级为 \texttt{verified} 的，是\emph{数值}所依赖的迁移率未经标定、
+\texttt{statistics} 只有 Boltzmann，以及两条设计判据在本离散下
+\emph{原理上不可达}（见 \S\ref{sec:dd-limits}）。
+
+\section{控制方程与物理假设}
+\label{sec:dd-model}
+
+\subsection{方程组}
+\label{sec:dd-equations}
+\index{1concept@概念!drift-diffusion@漂移扩散}
+
+在稳态、等温、单极（只考虑电子）的假定下，器件由两个方程描述：
+
+\begin{equation}
+\nabla\cdot\bigl(\epsr\epsO\nabla\psi\bigr) \;=\; -q\,\bigl(N_{\text{net}} - n\bigr),
+\label{eq:dd-poisson}
+\end{equation}
+
+\begin{equation}
+\nabla\cdot\Jnn \;=\; 0,
+\qquad
+\Jnn \;=\; q\,\mumu\,n\,\mathbf{E} \;+\; q\,D_n\nabla n ,
+\label{eq:dd-continuity}
+\end{equation}
+
+$\psi$ 为静电势，$N_{\text{net}}=N_D^{+}-N_A^{-}$ 为净电离杂质浓度，
+$\mathbf{E}=-\nabla\psi$。第二式（电流密度）在本模块中并不直接使用 ——
+实际离散的是它的\emph{通量形式}，见 \S\ref{sec:dd-sg}。
+
+"单极"这一限定是有代价的，且代价不小：电子单极模型里没有空穴去耗尽受主。
+把缓冲层的 $1\times10^{17}$\U{cm^{-3}} 受主当作固定电离电荷，会在缓冲层内
+造出非物理的巨大电场，而 Poisson 解隐含的电子密度又会让"半绝缘"缓冲层
+\emph{变成导体} —— 实测表现为端点电流比沟道电流大一个数量级，
+电流直接漏进衬底。因此本模块采用单极 HEMT 的标准抽象：
+\textbf{缓冲层 = 中性介质 + 载流子钉零 + 对连续性方程的零通量壁}。
+
+\subsection{为什么未知量取 $(\psi,n)$ 而不是 $(\psi,\varphi_n)$}
+\label{sec:dd-unknowns}
+\index{1concept@概念!unknown choice@未知量选择}
+
+教科书通常以 $(\psi,\varphi_n)$（$\varphi_n$ 为准费米势）为未知量，
+因为此时
+$n=N_C\exp\!\bigl(q(\psi-\varphi_n)/kT\bigr)$ 使密度随 $\varphi_n$ 指数变化，
+数值动态范围被压缩。本模块反其道而行，以\emph{密度本身}为未知量。理由在
+\S\ref{sec:dd-sg} 的偏导结构里，此处先给出结论：
+
+宽禁带势垒层与耗尽缓冲层中，密度会下溢到零。若以 $\varphi_n$ 为未知量，
+连续性方程在这些区域会变成\emph{恒等于零}的空方程 —— 方程没坏，
+但它不含任何信息，Newton 系统在这些行上是奇异的。而以 $n$ 为未知量时，
+Scharfetter--Gummel 通量对密度的偏导\emph{与密度无关}
+（\crefeq{eq:dd-flux-partials}），连续性方程在任何密度下都保持良态。
+
+代价是未知量的动态范围极大，这由行缩放（\S\ref{sec:dd-scaling}）处理。
+
+\subsection{统计}
+\label{sec:dd-statistics}
+
+载流子密度取 Boltzmann 近似：
+
+\begin{equation}
+n \;=\; \NC\,\exp\!\left(\frac{\psi-\varphi_n}{kT/q}\right),
+\qquad
+\NC \;=\; 2\left(\frac{2\pi \meff kT}{h^{2}}\right)^{3/2},
+\label{eq:dd-boltzmann}
+\end{equation}
+
+$kT/q$ 以伏特计，使指数无量纲。指数在 $\pm100$ 处被截断；
+这不是数值上的偷懒，而是一个\emph{可微}的钳制：截断之上实现残差
+严格是"指数取截断值"的形式，因此 Jacobian 仍是它的精确导数，
+Newton 不会因钳制而失去一致性。
+
+参数 \akey{statistics} \textbf{只接受} \akey{boltzmann}，其余取值
+显式报错。这是一个刻意留下的缺口：简并修正（Joyce--Dixon 或
+Fermi--Dirac 积分）\emph{必须同时修改 Scharfetter--Gummel 通量}
+（广义 Einstein 关系），只改密度公式会得到一个静默不一致的格式。
+宁可拒绝，不要半搬。
+
+\subsection{边界条件}
+\label{sec:dd-boundary}
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.24\textwidth} p{0.66\textwidth}@{}}
+\toprule
+\textbf{边界} & \textbf{条件}\\
+\midrule
+源、漏接触 & 对 $\psi$ \emph{与} $n$ 同时施加 Dirichlet；两者随端电压同步平移，
+  使接触面不携带伪电流\\
+栅极 & 对 $\psi$ 的 Schottky Dirichlet（$v_{0.1.0}$ 无栅电流），
+  对 $n$ 不加约束\\
+背面 & 接地（$\psi=0$），衬底视为理想接地\\
+无栅表面 & 钉在 Schottky 参考电位（工程近似，见 \S\ref{sec:dd-limits}）\\
+缓冲层 & 载流子钉零，且对连续性方程是零通量壁\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+"接触同时钉 $\psi$ 与 $n$"这一点值得强调。若只钉 $\psi$，接触面的
+SG 通量会因两侧密度不匹配而产生一个虚假的电流，端点电流随即失去守恒性；
+本模块的做法是把平衡态解在接触列上的取值\emph{整个}作为储层，
+漏极在此基础上叠加 $V_{ds}$，因此接触面天然无电流。
+
+\section{离散化}
+\label{sec:dd-discretisation}
+
+\subsection{有限体积五点格式}
+\label{sec:dd-fv}
+\index{3method@方法!finite volume@有限体积}
+
+两个方程都在\emph{控制体}上积分。以 $V_i$ 记节点 $i$ 的控制体体积，
+$A_{ij}$、$h_{ij}$ 记节点 $i$ 与其邻居 $j$ 之间面的面积与间距，则
+Poisson 方程为
+
+\begin{equation}
+\sum_{j\in\mathcal{N}(i)}
+\frac{\epsface_{ij}\epsO\,A_{ij}}{h_{ij}}
+\bigl(\psi_i-\psi_j\bigr)
+\;=\;
+q\bigl(N_{\text{net},i}-n_i\bigr)V_i \;+\; \sigma_{\text{sheet}}\,\delta_{i,\text{int}},
+\label{eq:dd-poisson-fv}
+\end{equation}
+
+面上的介电常数取两侧的\emph{调和}（串联）平均：
+
+\begin{equation}
+\epsface_{ij} \;=\; \frac{2\,\epsri{i}\,\epsri{j}}{\epsri{i}+\epsri{j}}.
+\label{eq:dd-harmonic}
+\end{equation}
+
+调和平均是介电跃变与节点\emph{之间}时的正确处理；若界面恰在节点上，
+它退化为算术平均。**本模块的界面恰在节点上**（\crefchap{ch:mesh}），
+因此这一处在界面上被抹平一个格子宽度 —— 这是设计稿明示接受的代价，
+其量化后果见 \S\ref{sec:dd-limits}。
+
+连续性方程按通量守恒写：
+
+\begin{equation}
+\sum_{j\in\mathcal{N}(i)} J_{ij}\,A_{ij} \;=\; 0,
+\label{eq:dd-continuity-fv}
+\end{equation}
+
+$J_{ij}$ 为由 Scharfetter--Gummel 公式给出的面电流密度。
+
+\subsection{Scharfetter--Gummel 通量}
+\label{sec:dd-sg}
+\index{3method@方法!Scharfetter--Gummel 通量}
+
+面电流不取 $\mathbf{E}$ 与 $\nabla n$ 的直接差分离散（那在大 Peclet 数下
+会振荡），而取指数拟合形式 \cite{scharfetter1969}。以 $L$、$R$ 记面两侧：
+
+\begin{equation}
+\boxed{\;
+J_{LR} \;=\; \frac{q\,\mumu\,kT}{h}
+\Bigl[\,n_R\,B(\delta) \;-\; n_L\,B(-\delta)\,\Bigr],
+\qquad
+\delta \;=\; \frac{\Ec^{L}-\Ec^{R}}{kT},
+\;}
+\label{eq:sg-flux}
+\end{equation}
+
+\begin{equation}
+B(x) \;=\; \frac{x}{\ee^{x}-1},
+\qquad
+B(-x) \;=\; B(x) + x .
+\label{eq:bernoulli}
+\end{equation}
+
+\crefeq{eq:bernoulli} 中的\emph{反射恒等式}是 SG 权重的基本性质，也是本模块
+踩过的一个坑：把反射关系写反（写成 $-B(x)+x$）之后，通量仍然
+\emph{完全自洽} —— 系统级 Jacobian 对中心差分照样通过 $4\times10^{-10}$ ——
+却在"带边沿电流方向上升"的每个面上系统性错误。修正后平衡态残差从 $35$
+降到 $4.8\times10^{-6}$（七个数量级）。教训是：
+\textbf{一致性不等于正确性}；通量类子程序必须对闭式解单独测试，
+不能只靠"系统自洽"。
+
+实现同时使用两个分支的解析导数 $B'(x)$，并且只对\emph{衰减}的指数求值：
+
+\begin{equation}
+B'(x) = \frac{\ee^{x}-1-x\ee^{x}}{(\ee^{x}-1)^{2}},
+\qquad
+B'(-x) = -B'(x)-1 \quad (x>0),
+\label{eq:bernoulli-slope}
+\end{equation}
+
+$x\to0$ 处退回 Taylor 展开，避开 $0/0$。
+
+\subsection{通量的解析偏导}
+\label{sec:dd-flux-partials}
+
+\crefeq{eq:dd-flux-partials} 列出通量对四个自变量的解析偏导，
+它们是 Jacobian 的构件，也都被单独对中心差分验证：
+
+\begin{equation}
+\begin{aligned}
+\pder{J_{LR}}{n_R} &= \frac{q\mumu kT}{h}\,B(\delta), &
+\pder{J_{LR}}{n_L} &= -\frac{q\mumu kT}{h}\,B(-\delta),\\[2pt]
+\pder{J_{LR}}{\psi_L} &= \frac{q\mumu kT}{h}\cdot\frac{1}{kT}
+  \Bigl[n_R B'(\delta) + n_L B'(-\delta)\Bigr], &
+\pder{J_{LR}}{\psi_R} &= -\,\pder{J_{LR}}{\psi_L}.
+\end{aligned}
+\label{eq:dd-flux-partials}
+\end{equation}
+
+三条性质值得逐条点明。
+
+\textbf{（i）密度偏导与密度无关。} $\partial J/\partial n$ 只由几何、
+迁移率与带边差决定，不含 $n$。这正是 \S\ref{sec:dd-unknowns} 选择 $n$
+作未知量的理由，也解释了为什么宽禁带势垒或耗尽缓冲层里的连续性方程
+仍然良态。
+
+\textbf{（ii）势偏导反对称。} 把两个电位同时平移一个常数不改变 $\delta$，
+也就不改变电流，因此 $\partial J/\partial\psi_L = -\partial J/\partial\psi_R$。
+这个不变量是一个强判据：实现里只写了"带 $n_L$ 的那一项"的写法
+是 $100\%$ 错误的，而它的密度偏导仍然精确 —— 正是那种"只在参考状态
+做一次系统级 Jacobian 检查"会漏掉的错误。
+
+\textbf{（iii）带边包含异质结台阶。} $\delta$ 中的 $\Ec$ 是
+$\Ec^0-\psi$（数值上），因此 SG 通量\emph{同时}携带静电势差与
+异质结带阶；平衡态下 $\delta$ 处处为零，通量恒等于零，
+这是 T1 基准断言的不变量。
+
+\subsection{场依赖迁移率}
+\label{sec:dd-mobility}
+\index{3method@方法!Caughey--Thomas 迁移率}
+
+低场迁移率之外，本模块默认启用 Caughey--Thomas 速度饱和模型
+\cite{caugheyThomas1967}：
+
+\begin{equation}
+\mumu(E) \;=\; \mumu_0\left[1+\left(\frac{\mumu_0 E}{v_{\text{sat}}}\right)^{\beta}\right]^{-1/\beta},
+\label{eq:dd-mobility}
+\end{equation}
+
+低场下趋于 $\mumu_0$，高场下趋于 $v_{\text{sat}}/E$。
+面电场取 $E=\abs{\Delta\Ec}/h$，即\emph{该面自己的}场。
+
+关键在于它的导数必须进 Jacobian：SG 前因子带 $\mumu$，而面电场依赖带边，
+所以 \crefeq{eq:dd-flux-partials} 的势偏导要多出一项
+
+\begin{equation}
+\pder{J}{\psi_L}\bigg|_{\mumu} \;=\;
+\frac{q\,kT}{h}\Bigl[n_R B(\delta)-n_L B(-\delta)\Bigr]\pder{\mumu}{E}\pder{E}{\psi_L},
+\qquad
+\pder{E}{\psi_L} = -\frac{\operatorname{sgn}(\delta)}{h},
+\label{eq:dd-mobility-chain}
+\end{equation}
+
+$\dd\mumu/\dd E$ 有闭式（在 $E=0$ 处保持有限，$\beta\ge1$）。
+这一项是\emph{反对称}的，因此性质（ii）在启用场依赖后依然成立 ——
+测试对此有单独断言，且**分别在启用与关闭场依赖两种情形下**做了
+通量偏导的中心差分校验。
+
+\subsection{块三对角结构与未知量排序}
+\label{sec:dd-block}
+\index{1concept@概念!block tridiagonal@块三对角}
+
+每个节点携带两个未知量，按 $(\psi,\varphi_n)$ 交错存储；
+竖直行 $j$ 展平后是 $2n_x$ 个未知量。张量积网格上，行 $j$ 只与
+$j\pm1$ 耦合，因此 Jacobian 是\emph{块三对角}的，块大小 $m=2n_x$：
+
+\begin{equation}
+\mat{J} \;=\; \operatorname{tridiag}\bigl(\mat{L}_j,\ \mat{D}_j,\ \mat{U}_j\bigr),
+\qquad \mat{L}_j,\mat{D}_j,\mat{U}_j \in \mathbb{R}^{m\times m}.
+\label{eq:dd-block-structure}
+\end{equation}
+
+对演示网格（$n_x=41$，$n_z=1621$），未知量总数 $2n_xn_z = 132\,922$ ——
+稠密分解不可行，而块三对角直接解的代价是 $O(n_zm^{3})=O(n_z(2n_x)^3)$，
+这正是 \crefchap{ch:blocktridiag} 存在的理由。线性步经 Deck 的
+\akey{linear} 槽解析，因此本模块并不知道、也不依赖具体用什么分解。
+
+\subsection{行缩放：量纲化而非对角均衡}
+\label{sec:dd-scaling}
+\index{3method@方法!row scaling@行缩放}
+
+两个方程块的单位不同（每单位宽度的电荷 vs.\ 每单位宽度的电流），
+量级相差许多个数量级，直接取残差范数会失去意义。本模块对每个
+非 Dirichlet 行除以\emph{固定的物理参考量}：
+
+\begin{equation}
+\text{Poisson 行} \div C_{\text{local}},
+\qquad
+\text{连续性行} \div I_{\text{ref}},
+\label{eq:dd-row-scaling}
+\end{equation}
+
+前者把 Poisson 残差变成\emph{伏特}，后者把连续性残差变成\emph{相对电流}。
+这是一次左乘正对角矩阵，不改变解，但使残差范数成为两个块共同的、
+有物理意义的收敛度量。
+
+有一条被\emph{否决}的做法值得记录：用 Jacobian 对角做行均衡
+（即自适应缩放）。它会让宽禁带行与耗尽行获得巨大权重，
+残差范数随即被相消噪声主导，线搜索于是接受"物理残差变差十二个数量级"的步。
+实测把平衡态残差从 $4.2$ 改到 $1.3\times10^{-3}$ 才回到正轨。
+未知量的\emph{列}缩放也被试过并否决，理由写在代码里：
+在 $(\psi,n)$ 表述下矩阵元素与未知量本身无关
+（$\dd J/\dd n$ 不含 $n$，Poisson 的 Laplacian 不含 $\psi$），
+列缩放无法改善条件数，盲目施加反而会让块消元的枢轴溢出。
+
+\section{求解算法}
+\label{sec:dd-solver}
+
+\subsection{三层保险}
+\label{sec:dd-three-layers}
+\index{3method@方法!pseudo-transient continuation@伪瞬态延拓}
+
+方案把"Newton 收敛困难"列为最高风险，落地为三层递进的保险：
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.4em,topsep=0.4em]
+  \item \textbf{偏置扫描延拓}：漏压（外层）与栅压（内层）逐点推进，
+        前一点的收敛解作为下一点的初值；
+  \item \textbf{阻尼线搜索}：残差不降则步长减半（Armijo 式接受），
+        最多 \akey{damping_max_halvings} 次；
+  \item \textbf{伪瞬态延拓（PTC）}：当线搜索连续失败时，在\emph{迭代矩阵}
+        上注入物理时间项
+        \begin{equation}
+        R^{\text{cont}}_i \;\to\; R^{\text{cont}}_i
+        + \bigl(n_i-n_i^{\text{prev}}\bigr)\frac{V_i}{\tau},
+        \label{eq:dd-ptc}
+        \end{equation}
+        并让 $\tau$ 每成功一步 $\times10$（上限 $1$\U{s}）、每失败一步
+        $\times0.1$；$\tau$ 足够大、Newton 进入收敛域后自动撤除，
+        回到纯 Newton。
+\end{enumerate}
+
+\crefeq{eq:dd-ptc} 的关键在于\textbf{稳态残差本身不被改动}。时间项
+只改变\emph{迭代方向}，Newton 循环始终在监视并判定\emph{物理}残差
+$\mat{R}^{\text{phys}}$（实现上由 \texttt{aux['physical']} 单独携带）。
+否则收敛判据会把"沿延拓路径走得怎么样"当成"稳态方程解得怎么样"，
+两者不是一回事。
+
+\subsection{平衡态锚点}
+\label{sec:dd-equilibrium}
+
+零偏压下的解不是"随便一个初值"，而是\emph{精确解}，
+因此可以当作整个扫描的锚：先解一次非线性 Poisson
+（$\psi$ 与 $n$ 在 Boltzmann 关系下自洽），把结果采用为接触储层参考：
+
+\begin{equation}
+\psi^{\text{src}}_j = \psi_{\text{eq}}(z_j, x_{\min}),
+\qquad
+\psi^{\text{drn}}_j = \psi_{\text{eq}}(z_j, x_{\max}).
+\label{eq:dd-reservoirs}
+\end{equation}
+
+随后每个偏压点的接触条件由 \crefeq{eq:dd-reservoirs} 加端电压得到，
+于是"接触面携带零电流"成为构造性的性质，而不是需要靠收敛去逼近的目标。
+
+\subsection{偏压延拓的电位预移位}
+\label{sec:dd-bias-shift}
+
+把上一点的解直接当新初值有一个隐蔽的失败模式：漏极接触的电位跳了
+$\Delta V_{ds}$，而内部还停在旧值上 —— 这个\emph{接触局部冲击}
+足以让线搜索停滞，即便 Jacobian 是精确的。修法是按接触数据所强加的
+同一个线性斜坡预移位内部电位：
+
+\begin{equation}
+\psi(x) \;\leftarrow\; \psi(x) + \Delta V_{ds}\cdot
+\frac{x-x_{\min}}{x_{\max}-x_{\min}} .
+\label{eq:dd-ramp}
+\end{equation}
+
+实测效果是把"停滞的解"变成"五步迭代的解"。此外，扫描本身按
+\akey{max_step_V} 自动插入中间步（\emph{不}上报，只负责把解带过去）：
+从 $0$ 直接跳到 $5$\U{V} 不是延拓，是带错初值的冷启动。
+
+\subsection{端点电流与连续性门禁}
+\label{sec:dd-continuity-gate}
+\index{3method@方法!continuity gate@连续性门禁}
+
+端点电流由接触面通量求和得到（进入器件为正）：
+
+\begin{equation}
+I_s \;=\; \sum_j J_{j,0}\,w_{z,j},
+\qquad
+I_d \;=\; -\sum_j J_{j,n_x-1}\,w_{z,j}.
+\label{eq:dd-terminal-current}
+\end{equation}
+
+求和\emph{只遍历真正导通的面}（与残差使用同一掩码）。这一点不是细节：
+若把势垒层的载流子面也算进去，端点电流会与求解器刚刚满足的
+连续性平衡相差若干个数量级。
+
+守恒性由门禁判定：
+
+\begin{equation}
+\frac{\abs{I_s+I_d}}{\max\bigl(\abs{I_d},\abs{I_s}\bigr)} \;\le\; \varepsilon_{\text{cont}}
+\quad\text{当}\quad \abs{I_s+I_d} > I_{\text{floor}},
+\label{eq:dd-gate}
+\end{equation}
+
+绝对地板 $I_{\text{floor}}$ 的存在是必要的：在平衡态附近端点电流是
+机器零（实测 $2.7\times10^{-15}$\U{A/m}），此时\emph{相对}误差由浮点噪声
+主导，对分母极小的比值设门槛只会制造假警报。低于地板者不设门槛。
+
+\subsection{局部平衡闭合与辅助掩码}
+\label{sec:dd-masks}
+
+宽禁带势垒层内没有电流，其连续性方程对 $n$ 是线性齐次方程，
+密度因此近乎\emph{自由}（Jacobian 的最小奇异值比最大低十个数量级）。
+本模块用一个在物理上精确的替换消除这个自由模：在无电流行上以
+\emph{局域平衡}闭合
+
+\begin{equation}
+n_i \;=\; \NCeff{i}\,\exp\!\left(\frac{\psi_i}{kT/q}\right)
+\qquad\text{（取 } \varphi_n=0\text{）},
+\label{eq:dd-local-equilibrium}
+\end{equation}
+
+取代连续性残差；行缩放随后把它变成一个\emph{相对密度误差}。
+除这一掩码外，网格还携带另外四组掩码（欧姆接触、栅、背面、无栅表面，
+以及载流子钉零的缓冲），它们的互斥性与对边界的覆盖由测试断言。
+
+\section{验证与基准}
+\label{sec:dd-verification}
+
+验证纪律与 \crefchap{ch:sp1d} 一致：**先对闭式解，再谈不变量，
+最后才看 IV 长什么样**。设计稿给出六个级别 T0--T5，
+全部在 \fpath{tests/test_transport_dd.py} 中以断言形式固化。
+制造解方法（MMS）的使用遵循其标准表述 \cite{roache2002,salari2000}，
+验证与确认的总体框架见 \cite{oberkampf2010}。
+
+\subsection{通量的闭式解与偏导}
+
+\begin{veriftable}{Scharfetter--Gummel 通量：闭式解、反射恒等式与偏导}{tab:dd-flux}
+\vrow{Bernoulli 函数对各区间}{$10^{-12}$ 相对}{\crefeq{eq:bernoulli} 的闭式解在宽区间内吻合}
+\vrow{反射恒等式 $B(-x)=B(x)+x$}{恒等}{通过（含 $x\to0$ 与溢出区）}
+\vrow{$B'(x)$ 对中心差分}{相对误差小}{通过（$10^{-12}$ 量级）}
+\vrow{四个通量偏导对中心差分}{相对误差小}{通过（\emph{无}场依赖）}
+\vrow{四个通量偏导对中心差分（启用 Caughey--Thomas）}{相对误差小}{
+  通过（含 \crefeq{eq:dd-mobility-chain} 的 $\dd\mumu/\dd E$ 项）}
+\vrow{势偏导反对称}{$\partial J/\partial\psi_L=-\partial J/\partial\psi_R$}{通过}
+\vrow{密度偏导与密度无关}{\crefeq{eq:dd-flux-partials} 第一行}{通过（跨 $17$ 个数量级）}
+\vrow{异质结台阶上的零通量}{$\abs{J}/\text{scale}<10^{-12}$}{通过}
+\vrow{迁移率极限与导数}{低场 $\to\mumu_0$；$\dd\mumu/\dd E$ 对差分}{
+  低场偏差 $<10^{-6}$；$E=0$ 处斜率 $<10^{-6}$}
+\end{veriftable}
+
+\subsection{T0：均匀电阻闭式解}
+
+把网格退化为直通道、关断极化与肖特基之后，问题有闭式解
+$J=qN_D\mumu V/L$。
+
+\begin{veriftable}{T0\ \ 均匀电阻的闭式解（判据：相对误差 $<0.1\%$）}{tab:dd-t0}
+\vrow{电流对闭式解 $J=qN_D\mumu V/L$}{$<10^{-3}$}{\textbf{$<10^{-6}$（超出判据三个数量级）}}
+\vrow{两端电流一致}{一致}{$<10^{-9}$}
+\vrow{电流与偏压严格正比}{比值 $=2$}{$2.0\pm10^{-6}$}
+\end{veriftable}
+
+\subsection{T1：平衡态不变量}
+
+\begin{veriftable}{T1\ \ 零偏平衡态（判据：通量 $<10^{-12}$\U{A/m}）}{tab:dd-t1}
+\vrow{平衡态端点电流}{$\le10^{-12}$\U{A/m}}{\textbf{$2.7\times10^{-15}$\U{A/m}（机器零）}}
+\vrow{横向电流剖面}{$\le10^{-12}$\U{A/m}}{$\sim10^{-14}$\U{A/m}}
+\vrow{Poisson 子问题平衡电荷平衡}{残差小}{$<10^{-10}$}
+\vrow{带边算子与态密度台阶自洽}{重建 $=$ \akey{nc_eff}}{相对 $10^{-12}$}
+\vnote{设计稿 T1 的另一半——与一维自洽 SP 的带边差 $<1$\U{meV}——\textbf{未做}，
+      因为层界落在节点上的抹平使该判据在本离散下原理上不可达。
+      这本身是一个诚实的结论，见 \S\ref{sec:dd-limits}。}
+\end{veriftable}
+
+\subsection{T2：制造解与二阶收敛}
+
+Poisson 子问题用制造解检验：取 $\psi^{\star}=\sin(\pi z/L)$
+（与 $x$ 无关，使横向项恒为零，从而\emph{隔离}竖直算子），
+把解析源项加进去，加密四档。
+
+\begin{veriftable}{T2\ \ Poisson 子问题的制造解收敛阶}{tab:dd-t2}
+\vrow{竖直间距 $25$\U{nm}}{---}{$L_\infty$ 误差 $1.295\times10^{-2}$}
+\vrow{$12.5$\U{nm}}{---}{$3.219\times10^{-3}$（观测阶 $2.008$）}
+\vrow{$6.25$\U{nm}}{---}{$8.036\times10^{-4}$（观测阶 $2.002$）}
+\vrow{$3.125$\U{nm}}{二阶收敛}{$2.008\times10^{-4}$（观测阶 $2.001$）}
+\vnote{观测阶由相邻两档误差比的对数给出。三个值都贴在 $2$ 上，
+      说明界面以外的格式确实是二阶的 —— 与界面处的一阶抹平并不矛盾：
+      制造解在界面两侧都是光滑的。}
+\end{veriftable}
+
+\subsection{T3：端点电流连续性门禁}
+
+\begin{veriftable}{T3\ \ 端点电流守恒（判据：相对误差 $<10^{-6}$，全部偏压点）}{tab:dd-t3}
+\vrow{平衡态（$0$\U{V}）}{\crefeq{eq:dd-gate}}{低于绝对地板，按设计不设门槛}
+\vrow{$V_{ds}\le1$\U{V} 的全部 $10$ 个偏压点}{$<10^{-6}$}{
+  \textbf{$1\times10^{-13}$ 至 $1\times10^{-16}$}}
+\vrow{耦合 Jacobian 对中心差分（逐行相对）}{相对误差小}{
+  $\sim10^{-10}$（沿 Newton 路径）}
+\end{veriftable}
+
+\noindent
+\textbf{"逐行相对"是判据的关键。} 本模块吃过一次大亏：$( \psi,\varphi_n)$
+改 $(\psi,n)$ 时，Jacobian 里残留一行旧代码，把第二个未知量当成准费米势
+代进了态密度公式 —— 内部密度与残差相差 \emph{17 个数量级}，
+连续性行因此完全失去对 $\psi$ 的耦合，整个耦合矩阵在 Newton 最需要的
+方向上近奇异。而当时的差分校验用\emph{列}最大值归一化，
+坏掉的项绝对值很小，相对误差看着只有 $10^{-10}$。
+改成\emph{逐行相对}判据后立刻暴露。这条教训值得写进任何后续模块：
+\textbf{导数校验要在单元级（通量本身）做，且沿 Newton 路径做，
+不能只在参考状态做一次。}
+
+\subsection{T4--T5：延拓无关性与趋势}
+
+\begin{veriftable}{T4\ \ 延拓无关性；T5\ \ 趋势与饱和}{tab:dd-t4-t5}
+\vgroup{T4\ \ 初值/延拓无关性（判据：相对差 $<5\times10^{-3}$）}
+\vrow{同一偏压点经两条不同阶梯到达}{相对差 $<5\times10^{-3}$}{通过（$0.05$ 与 $0.1$\U{V} 阶梯）}
+\vgroup{T5\ \ 趋势合理性}
+\vrow{栅压变负 $\Rightarrow$ 电流下降}{单调}{通过}
+\vrow{迁移率加倍 $\Rightarrow$ 电流加倍}{比值 $=2$}{$2.0\pm0.1$}
+\vrow{\textbf{漏电流饱和}}{高场斜率显著小于低场}{斜率比 $1.90\to1.75$}
+\vnote{饱和判据必须用\emph{相对}对照。实测 $V_{ds}:0.25\to0.5\to1.0$\U{V} 时
+      $I_d:146\to278\to478$\U{A/m}；同器件在\emph{常数}迁移率下斜率比为
+      $2.00\to0.92$ —— 栅控器件本身就带约 $8\%$ 的次线性
+      （栅-沟道电位改变二维电子气），所以不能指望对照组是欧姆的。
+      测试断言的是"场依赖使斜率比明显更小"这一相对判据。}
+\end{veriftable}
+
+\subsection{端到端：演示 Deck}
+
+\begin{veriftable}{演示 Deck 的端到端结果（\fpath{decks/demo_hemt_dd.json}）}{tab:dd-demo}
+\vrow{运行状态}{success}{通过（$10$ 个偏压点全部收敛）}
+\vrow{墙钟时间}{---}{约 $50$\U{s}（\akey{max_step_V} $=0.05$\U{V}）}
+\vrow{二维电子气面密度与极化上界}{\crefeq{eq:ns-bound}}{
+  比 $\sigeff/q=9.6\times10^{12}$\U{cm^{-2}} 高约 $\mathbf{1.7}$ 倍}
+\vrow{网格掩码互斥且覆盖边界}{互斥 + 覆盖}{通过}
+\vnote{1.7 倍这一偏差可归因于层界落在节点上的抹平
+      （\crefchap{ch:mesh} 与 \S\ref{sec:dd-discretisation}），
+      设计稿已预见，此处首次量化。$0.25$\U{V} 阶梯只需约 $9$\U{s}，
+      但末端点不收敛 —— 时间是拿收敛性换来的。}
+\end{veriftable}
+
+\section{误差来源与适用边界}
+\label{sec:dd-limits}
+\index{1concept@概念!validity limits@适用边界}
+
+\limitsheading
+
+\begin{bounds}
+  \item \textbf{迁移率是占位参数。} \akey{mu0_cm2_Vs}（$1500$\U{cm^2/(V\cdot s)}）
+        与 \akey{vsat_cm_s}（$2\times10^{7}$\U{cm/s}）均未经标定。
+        L2 基准之前，\emph{绝对数值不可信}；可用的是趋势、
+        守恒性与收敛阶。
+
+  \item \textbf{只覆盖到约 $1$\U{V} 的漏压。} 速度饱和已实现且默认启用，
+        但 $V_{ds}\ge2$\U{V} 时 Newton 仍不收敛（欠账）。
+        这是模型边界而非调参问题。
+
+  \item \textbf{短栅的速度过冲与弹道成分缺席。}
+        $L_g=150$\U{nm} 已在漂移扩散假设开始失效的尺度上。
+        方案 §15 的对策（流体动力学模型插件 + 经验修正 + 报告标注）
+        原样适用。
+
+  \item \textbf{界面被一个单元宽度抹平。} 量化后果即 $1.7$ 倍的面密度偏差。
+        设计稿 T1 中"与一维 SP 的带边差 $<1$\U{meV}"这条判据
+        在本离散下\emph{原理上不可达} —— 这是诚实结论，不是待办事项。
+
+  \item \textbf{只实现 Boltzmann 统计。} \akey{statistics} 接受其他取值时
+        显式报错，因为简并修正必须同时改通量；在 \crefeq{eq:dd-poisson}
+        意义上的高密度沟道中，这会使面密度与电流有系统性偏差。
+
+  \item \textbf{缓冲层是抽象而非器件。} "中性介质 + 载流子钉零 + 零通量壁"
+        是单极 HEMT 的标准处理，但它不是真实的半绝缘缓冲：
+        深能级、俘获、背栅效应一概没有。
+
+  \item \textbf{无栅电流。} $I_g$ 由构造为零，而非由求解得到。
+        因此一切与栅泄漏相关的现象（栅漏电、击穿）不在模型内。
+
+  \item \textbf{无陷阱、无自热、无瞬态。} 电流坍塌、gate-lag、
+        drain-lag、晶格温升一概没有；RF 大电流点的预测因此偏乐观。
+
+  \item \textbf{无栅表面钉扎是工程近似。} 真实的无栅表面由施主态钉在
+        特定能级；本模块把它钉在 Schottky 参考电位上。
+        它同时承担"给势垒电位一个锚"的数值职责 ——
+        去掉它，势垒电荷近似为零时 Poisson 退化为纯 Laplace，
+        势垒电位存在近乎自由的模式。
+
+  \item \textbf{PTC 与阻尼的参数是工程值。} $\tau_0$（$10^{-12}$\U{s}）
+        与减半次数不是物理量；换网格尺度可能需要重调。
+        测试只锁\emph{行为}，不锁这些参数。
+\end{bounds}
+
+\section{接口契约与小结}
+\label{sec:dd-interface}
+\index{5artifact@数据通道!iv}\index{5artifact@数据通道!current}
+
+{\small
+\begin{longtable}{@{}p{0.06\textwidth} p{0.24\textwidth} p{0.60\textwidth}@{}}
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+入 & \akey{mesh} & \akey{x_nm}, \akey{z_nm}, \akey{nx}, \akey{nz}, \akey{layers[]}（含 \akey{node_slice}）\\
+入 & \akey{structure} & \akey{layers[].{role, material, x_al, doping_cm3, doping_kind}},
+  \akey{gate.barrier_eV}\\
+入 & \akey{materials} & 介电常数、有效质量、带隙（含合金插值）\\
+入 & \akey{polarization} & $\sigeff$、势垒厚度、$\Delta E_g$（$\dEc$ 的优先来源）\\
+入 & \akey{quantum}（可选） & \akey{potential_eV} 或 \akey{psi_V}，仅作\emph{初值}\\
+出 & \akey{electrostatics} & \akey{psi_V}、极值、坐标轴、\akey{gate_reference_V}、偏压\\
+出 & \akey{carriers} & \akey{density_m3}、极值、\akey{ns_cm2}、\akey{statistics}、迁移率\\
+出 & \akey{current} & 逐点记录（收敛、迭代数、残差、$I_d$/$I_s$/$I_g$、
+  连续性误差与门禁结果）、最差连续性误差、失败清单\\
+出 & \akey{iv} & \akey{vds_V}/\akey{vgs_V}/\akey{id_A_per_m} 曲线，
+  单位为 \U{A/m}（每单位器件宽度）\\
+出 & \akey{ns} & 最后偏压点的面密度（\U{cm^{-2}}）\\
+\end{longtable}
+}
+
+\noindent
+契约上有两处刻意的设计：\textbf{场数组只记最后一点}，而\emph{每个}
+偏压点的摘要都在 \akey{current} 里 —— 二维场数组随偏压点线性增长，
+全存会撑爆上下文，而"哪一点没收敛、为什么"才是诊断真正需要的。
+另一处是 \akey{iv} 的逐点完整记录（设计稿只要求曲线，实现多加了
+\akey{points}）：门禁失败必须能定位到\emph{具体偏压点}，只给曲线不够用。
+
+\subsection*{小结}
+
+本章的结论可以概括为三点。
+
+其一，\textbf{未知量的选择是一个物理判断，不是数值偏好。}
+取 $n$ 而非 $\varphi_n$ 作未知量，使宽禁带势垒与耗尽区的连续性方程
+保持良态（$\partial J/\partial n$ 与 $n$ 无关）—— 代价是动态范围极大，
+由\emph{固定物理参考量}的行缩放处理，而不是自适应对角均衡。
+
+其二，\textbf{三层保险解耦了三件不同的事}：延拓负责给出好的初值，
+线搜索负责保证每一步都下降，PTC 负责在 Newton 暂时失效时改变
+\emph{迭代矩阵}而不改变\emph{被解的方程}。稳态残差始终是判据本身，
+因此"沿延拓路径的表现"永远不会被误当成"稳态方程的解"。
+
+其三，\textbf{验证的层级必须先于"像不像器件"。}
+T0--T5 的顺序不是形式：闭式解先证明\textbf{离散是对的}，
+不变量再证明\textbf{守恒是对的}，收敛阶证明\textbf{格式是二阶的}，
+只有在这些之后，IV 曲线上的数字才值得被引用 ——
+而在迁移率标定之前，那些数字仍然只是\emph{趋势}。
+
+\cleardoublepage

@@ -1,0 +1,70 @@
+% =====================================================================
+%  modulecard.tex —— 模块卡片与可标定参数表
+%
+%  这是"一个插件 = 一个模块章"在排版上的机械载体。
+%  每个模块章的 §x.1 必须以 modulecard 开头，字段顺序固定：
+%      类别 / 能力 / 依赖 artifact / 产出 artifact / 验证状态 / 源码
+%  任何一章缺字段，或字段顺序不同，都视为模板违规（见 P6 校验脚本计划）。
+%
+%  ⚠ 实现约束：与 preamble/verify.tex 文件头所列完全相同。
+%  核心一条：不用 \begin{tabularx}/\begin{table}/\multicolumn，
+%  一律用不带环境记账的 \tabular ... \endtabular 原语 + \captionof。
+%  真因（tabularx.sty:53 读 \@currenvir）见该文件头，勿回退。
+% =====================================================================
+
+% ---- 模块卡片（非浮动，就地排版）-------------------------------------
+%  用法：\begin{modulecard}{module_id}{module_version} ... \end{modulecard}
+\newenvironment{modulecard}[2]{%
+  \par\medskip\noindent
+  \textbf{模块卡片}\quad\pid{#1}\quad{\small(#2)}%
+  \par\nobreak\smallskip\noindent
+  \begingroup
+  \setlength{\tabcolsep}{6pt}%
+  \renewcommand{\arraystretch}{1.22}%
+  \tabular{@{}
+    >{\bfseries\raggedright\arraybackslash}p{30mm}
+    p{\dimexpr\textwidth-30mm-2\tabcolsep\relax}@{}}
+  \toprule
+}{%
+  \bottomrule
+  \endtabular
+  \endgroup
+  \par\medskip
+}
+
+%  卡片行
+\newcommand{\cardrow}[2]{#1 & #2 \\}
+%  卡片内分隔线
+\newcommand{\cardsep}{\midrule}
+
+% ---- 可标定参数表（非浮动）-------------------------------------------
+%  用法：\begin{paramtable}{题注}{label} ... \end{paramtable}
+%  列：参数名 | 默认值 | 单位 | 含义与取值依据
+\newenvironment{paramtable}[2]{%
+  \par\medskip\noindent
+  \begingroup
+  \small
+  \captionof{table}{#1}\label{#2}%
+  \par\nobreak\smallskip\noindent
+  \setlength{\tabcolsep}{5pt}%
+  \renewcommand{\arraystretch}{1.18}%
+  \tabular{@{}p{38mm} p{20mm} p{16mm}
+    p{\dimexpr\textwidth-74mm-6\tabcolsep\relax}@{}}
+  \toprule
+  \textbf{参数} & \textbf{默认值} & \textbf{单位} & \textbf{含义与取值依据}\\
+  \midrule
+}{%
+  \bottomrule
+  \endtabular
+  \par\endgroup
+  \medskip
+}
+
+%  参数行
+\newcommand{\prow}[4]{#1 & #2 & #3 & #4 \\}
+\newcommand{\calib}{\textsuperscript{\textcolor{NemoCite}{$\ast$}}}
+\newcommand{\calibnote}{%
+  \par\smallskip\noindent\small
+  \textsuperscript{\textcolor{NemoCite}{$\ast$}}~标记者为\emph{可标定量}：
+  其默认值未经 L2 基准（Hall / XRD / C--V 实测）验证，使用前必须自行标定。%
+}

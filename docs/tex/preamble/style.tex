@@ -1,0 +1,104 @@
+% =====================================================================
+%  style.tex —— 版式、字体、页眉页脚、题注、交叉引用名称
+%  本文件只放"长什么样"，不放"是什么"。
+% =====================================================================
+
+% ---- 字体 ------------------------------------------------------------
+%  ctexbook 已按 fontset=windows 配好中文（宋体正文 / 黑体标题）。
+%  西文与数学保持 Computer Modern 家族，与中文宋体搭配稳定，
+%  且避免 unicode-math 带来的额外字体依赖。
+\setmainfont{Latin Modern Roman}
+\setsansfont{Latin Modern Sans}
+\setmonofont{Latin Modern Mono}[Scale=0.92]
+
+% ---- 行距与段落 ------------------------------------------------------
+\linespread{1.35}
+\setlength{\parskip}{0.35em}
+
+% ---- 断行宽容度 ------------------------------------------------------
+%  中英混排 + 等宽长标识符（physics.quantum.analytic_tw 之类）无法连字符
+%  断开，容易产生 overfull box。提高容忍度并给足紧急伸展量，
+%  让 TeX 用字间距吸收，而不是把字排出边界。
+\tolerance=3000
+\emergencystretch=5em
+\hbadness=10000   % 欠满盒多为中英混排的正常现象，不再刷屏
+%  溢出的报告阈值：2pt（≈0.7mm）以下不报。这是一个\emph{声明的容差}，
+%  不是掩盖缺陷 —— 在窄表格列里塞等宽长标识符时，亚毫米级溢出
+%  在视觉上不可辨，而它每次都会淹没日志里真正需要看的行。
+%  当前文档在此阈值下为 0 个溢出盒。
+\hfuzz=2pt
+
+% ---- 页眉页脚 --------------------------------------------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\itshape\nouppercase{\leftmark}}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[C]{\small\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+}
+
+% ---- 章标题 ----------------------------------------------------------
+%  不引入 titlesec，也不碰 tocloft：ctexbook 的章样式与中文排版已协调，
+%  改它们容易踩坑，而本文档的结构一致性靠 preamble/modulecard 保证。
+
+% ---- 题注 ------------------------------------------------------------
+\captionsetup{
+  font=small,
+  labelfont=bf,
+  labelsep=quad,
+  skip=6pt,
+  hypcap=false        % 本文档用非浮动的 \captionof，hypcap 无意义
+}
+\captionsetup[table]{position=top}
+
+% ---- 页眉高度 --------------------------------------------------------
+%  fancyhdr 的 \headheight 警告：给足高度，避免它每页刷屏。
+\setlength{\headheight}{15pt}
+
+% ---- 表格线宽 --------------------------------------------------------
+\setlength{\aboverulesep}{0.35ex}
+\setlength{\belowrulesep}{0.35ex}
+\heavyrulewidth=1.0pt
+\lightrulewidth=0.5pt
+
+% ---- 代码/键名 -------------------------------------------------------
+%  \pid{} 用于模块 id、\fpath{} 用于文件路径：两者只含点、下划线、斜杠，
+%  \emph{不含空格与花括号}，因此走 \path 使其可在标点处断行 ——
+%  模块 id 与路径都很长，在窄表格列里必然溢出。
+%  \akey{} 用 \detokenize：它的内容可能含空格与花括号
+%  （如 layers[].{role, material}），而 \path 会吞掉空格，故不适用。
+%  两者都要求内容写"裸"字符（裸下划线、裸花括号、裸百分号），
+%  不要写 \_ 、\{ —— \detokenize 会把它们连反斜杠一起印出来。
+%  ⚠ 用 \DeclareRobustCommand 而非 \newcommand：\path 是脆弱的（fragile），
+%  直接放进 \caption 这类\emph{移动参数}会报
+%  "\url used in a moving argument"。声明为 robust 之后，
+%  写进 .lot/.toc 的是 \fpath{...} 本身，展开推迟到排版时，问题消失。
+\DeclareRobustCommand{\pid}[1]{\texttt{\path{#1}}}
+\DeclareRobustCommand{\fpath}[1]{\texttt{\path{#1}}}
+\newcommand{\akey}[1]{\texttt{\detokenize{#1}}}
+
+% ---- 术语首现 --------------------------------------------------------
+%  \term{中文}{English}：首次出现时给出英文对照，之后只用中文。
+\newcommand{\term}[2]{#1（#2）}
+
+% ---- 边界与风险 ------------------------------------------------------
+\newcommand{\boundary}[1]{%
+  \par\smallskip\noindent
+  \textcolor{NemoWarn}{\rule[-0.2ex]{2pt}{1.1em}}\hspace{0.6em}%
+  \begin{minipage}[t]{\dimexpr\linewidth-1.2em\relax}%
+  \small #1%
+  \end{minipage}\par\smallskip
+}
+
+% ---- 交叉引用名称 ----------------------------------------------------
+%  本文档不用 cleveref（与 ctex 不兼容，见 preamble/refs.tex 文件头）。
+%  引用一律通过 preamble/refs.tex 中的类型化宏书写。
+
+% ---- 目录深度 --------------------------------------------------------
+\setcounter{tocdepth}{2}      % 收到 subsection
+\setcounter{secnumdepth}{3}   % 编号到 subsubsection

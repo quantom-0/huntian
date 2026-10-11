@@ -1,0 +1,801 @@
+% module_id: physics.quantum.sp1d
+% module_version: 1.1.1
+% plugin_dir: plugins/quantum_sp1d
+% source_files: plugins/quantum_sp1d/__init__.py, plugins/quantum_sp1d/solver.py
+% tests: tests/test_quantum_sp1d.py
+%
+% 本文件是"模块章模板"的样板：后续 8 章必须复刻其节次骨架
+%   x.1 模块契约 / x.2 控制方程与物理假设 / x.3 离散化与数值算法 /
+%   x.4 耦合求解（仅耦合型模块有此节）/ x.5 验证与基准 /
+%   x.6 误差来源与适用边界 / x.7 接口契约与小结
+% 任何偏离都视为模板违规。
+
+\chapter{自洽 Schrödinger--Poisson 求解器}
+\label{ch:sp1d}
+
+\begin{quote}
+\small
+\noindent\textbf{模块标识}\quad\pid{physics.quantum.sp1d}\qquad
+\textbf{版本}\quad 1.1.1\qquad
+\textbf{类别}\quad physics
+\end{quote}
+
+\noindent
+本章记述二维电子气\index{1concept@概念!2DEG@二维电子气}电荷状态的\emph{自洽}求解：
+联立求解静电 Poisson 方程与量子力学 Schrödinger 方程，得到亚带能级、波函数、
+占据数以及二维面密度。该模块是 \pid{physics.quantum.analytic_tw}
+（\crefchap{ch:analytic_tw}，解析三角阱估计）的即插即用替代实现，二者声明同一
+\texttt{quantum} 能力、产出同一组 artifact 键，因此下游模块无需任何改动
+\cite{ambacher2000,vurgaftman2003}。
+
+\section{模块契约}
+\label{sec:sp1d-contract}\index{4module@模块!physics.quantum.sp1d}\index{6param@参数!algorithm}\index{1concept@概念!plugin architecture@插件架构}
+
+\begin{modulecard}{physics.quantum.sp1d}{1.1.1}
+  \cardrow{类别}{physics（物理模型，流水线阶段）}
+  \cardrow{能力}{quantum, quantum.sp, quantum.schrodinger\_poisson}
+  \cardrow{依赖 artifact}{polarization, materials}
+  \cardrow{产出 artifact}{quantum, ns}
+  \cardrow{验证状态}{partially-verified}
+  \cardrow{源码}{\fpath{plugins/quantum_sp1d/}（多文件插件包）}
+  \cardrow{测试}{\fpath{tests/test_quantum_sp1d.py}}
+  \cardsep
+  \cardrow{算法参数}{algorithm $\in$ \{\akey{newton}, \akey{anderson}\}，默认 \akey{newton}}
+  \cardrow{协作者}{经 Deck 的 \akey{nonlinear} 槽解析 \pid{nonlinear.newton}（\crefchap{ch:newton}）}
+\end{modulecard}
+
+本模块声明为 \texttt{partially-verified}：其\emph{离散格式}与\emph{导数}均有闭式解
+或收敛阶证据支撑（见 \S\ref{sec:sp1d-verification}），但其\emph{绝对数值}依赖
+材料常数与屏蔽因子，二者均未经 L2 基准标定（见 \S\ref{sec:sp1d-limits}）。
+这一区分贯穿全章：格式正确性可断言，器件数值不可断言。
+
+\section{控制方程与物理假设}
+\label{sec:sp1d-model}\index{1concept@概念!conduction band edge@导带边}
+
+\subsection{几何与坐标约定}
+\label{sec:sp1d-geometry}\index{1concept@概念!coordinate convention@坐标约定}
+
+求解域为沿外延方向的一维切片，坐标 $z$ 自金属/势垒界面指向体内为正：
+
+\begin{center}
+\small
+\begin{tabular}{@{}l l l@{}}
+\toprule
+\textbf{位置} & \textbf{物理含义} & \textbf{边界条件}\\
+\midrule
+$z=0$      & 金属/AlGaN 界面（肖特基） & Dirichlet：$\Ec(0)=q(\phib-V_g)$\\
+$0<z<d$    & AlGaN 势垒（非故意掺杂）  & $\epsr=\epsr^{b}$，$\meff=\meff_{b}$\\
+$z=d$      & 异质界面：极化面电荷 + 带阶台阶 & \emph{落在网格面上}（见 \S\ref{sec:sp1d-face}）\\
+$d<z<L$    & GaN 沟道与缓冲             & $\epsr=\epsr^{c}$，$\meff=\meff_{c}$\\
+$z=L$      & 背面（绝缘缓冲）           & Neumann：零电场\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+竖直方向被解析为量子化方向，横向（栅长方向）不进模型。这是一维近似，
+其代价在 \S\ref{sec:sp1d-limits} 中说明。
+
+\subsection{静电方程}
+\label{sec:sp1d-poisson}\index{1concept@概念!Poisson equation@Poisson 方程}\index{3method@方法!finite volume@有限体积}
+
+未知量取\emph{导带底} $\Ec(z)$ 而非静电势 $\varphi$。二者相差一个符号
+（$\Ec=-q\varphi+\mathrm{const}$），但以 $\Ec$ 为未知量使量子子问题所需的
+势剖面\emph{直接可得}，无需在薛定谔求解前再做一次符号转换。定义算子
+
+\begin{equation}
+\mathcal{L}[\Ec] \;\equiv\; -\der{}{z}\!\left(\epsr(z)\,\epsO\,\der{\Ec}{z}\right),
+\label{eq:poisson-operator}
+\end{equation}
+
+则静电方程为
+
+\begin{equation}
+\boxed{\;\mathcal{L}[\Ec](z) \;=\; -q\,n(z) \;+\; \sigeff\,\delta(z-d)\;}
+\label{eq:poisson}
+\end{equation}
+
+其中 $n(z)$ 为体电子密度，$\sigeff$ 为屏蔽后的有效极化面电荷。
+\crefeq{eq:poisson} 的符号结构值得强调：源项 $-qn$ 使 $\Ec$ 在电子富集处
+\emph{上凸}，即电荷把势阱底部\emph{抹平} —— 这正是自洽求解中屏蔽效应的体现；
+界面处 $+\sigeff\delta$ 使 $\Ec$ \emph{向下尖凹}，该凹陷即二维电子气势阱。
+若把这两项的符号取反，势阱将变成势垒，2DEG 完全消失。
+
+\crefeq{eq:poisson} 未包含势垒层内的带阶台阶 $\dEc$。带阶是\emph{材料台阶}
+而非\emph{电荷}，若将其并入未知量并对它做差分，会在界面处产生一个虚假的
+界面偶极子。因此本模块把 $\dEc$ 单独携带，仅在薛定谔方程需要真实势剖面时加上：
+
+\begin{equation}
+\Ec^{\mathrm{full}}(z) \;=\; \Ec(z) \;-\; \dEc\,\Theta(z-d),
+\label{eq:offset}
+\end{equation}
+
+$\Theta$ 为 Heaviside 阶跃。迭代未知量始终是 $\Ec$，即 \crefeq{eq:poisson} 的
+\textbf{静电部分}。
+
+\subsection{量子方程}
+\label{sec:sp1d-schrodinger}\index{1concept@概念!Schrödinger equation@Schrödinger 方程}\index{3method@方法!BenDaniel--Duke 界面条件}
+
+包络函数近似下，竖直方向的单电子哈密顿量为 BenDaniel--Duke 形式
+\cite{benDaniel1966}：
+
+\begin{equation}
+\boxed{\;
+-\frac{\hb^{2}}{2}\,\der{}{z}\!\left(\frac{1}{\meff(z)}\,\der{\psi_i}{z}\right)
+\;+\; \Ec^{\mathrm{full}}(z)\,\psi_i(z)
+\;=\; \Ei\,\psi_i(z)
+\;}
+\label{eq:schrodinger}
+\end{equation}
+
+与常见的常质量形式不同，\crefeq{eq:schrodinger} 保留 $1/\meff$ 在微分算子内部。
+这是异质界面的正确处理：它给出的界面条件是 $\psi$ 连续、
+$(1/\meff)\,\dd\psi/\dd z$ 连续 \cite{benDaniel1966}，而常质量形式会
+错误地要求 $\dd\psi/\dd z$ 连续。在 AlGaN/GaN 界面上 $\meff$ 由 $0.30\,\mO$
+变到 $0.20\,\mO$，差异不可忽略。
+
+在有效质量近似下，导带被假定为抛物型，只解析 $\Gamma$ 谷；谷简并度 $g_v$
+仅作为态密度的倍数进入，不产生额外的能谷结构。
+
+\subsection{占据与面密度}
+\label{sec:sp1d-occupation}\index{2qty@物理量!sheet density@面密度}\index{2qty@物理量!Fermi level@费米能级}\index{1concept@概念!subband@亚带}
+
+平衡态下费米能级取为能量零点，$\Ef=0$。第 $i$ 个亚带的二维占据密度由
+Fermi--Dirac 统计给出：
+
+\begin{equation}
+n_i \;=\; A_i\,\ln\!\left(1+\ee^{(\Ef-\Ei)/\kT}\right),
+\qquad
+A_i \;=\; \frac{g_v\,\meff_i\,\kT}{\pi\hb^{2}},
+\label{eq:occupation}
+\end{equation}
+
+其中 $\meff_i$ 为该亚带的态密度有效质量，其定义见 \crefeq{eq:subband-mass}。
+总面密度与体密度为
+
+\begin{equation}
+\ns \;=\; \sum_i n_i,
+\qquad
+n(z) \;=\; \sum_i n_i\,\abs{\psi_i(z)}^{2}.
+\label{eq:ns}
+\end{equation}
+
+束缚态满足 $\Ei<0$（即位于费米能级以下），\crefeq{eq:occupation} 中的
+$\ln(1+\ee^{\cdot})$ 形式在 $\Ei$ 远低于 $\Ef$ 时自动退化为线性（简并）区，
+无需分段处理；实现中使用 \texttt{logaddexp} 以保证 $\Ei\gg\Ef$ 时不溢出。
+
+由 \crefeq{eq:poisson}，$\sigeff$ 对应的面密度上界为
+
+\begin{equation}
+\nsu \;=\; \frac{\sigeff}{q}.
+\label{eq:ns-upper}
+\end{equation}
+
+$\nsu$ 是物理上界：超过它意味着势垒层内的电场反向，2DEG 不可能存在。
+本模块默认\emph{不}施加该钳制（见 \S\ref{sec:sp1d-coupling}）。
+
+\subsection{边界条件与能量零点}
+\label{sec:sp1d-bc}\index{1concept@概念!Schottky contact@肖特基接触}
+
+金属/势垒界面为肖特基接触，导带底被钉在
+
+\begin{equation}
+\Ec(0) \;=\; q\,(\phib - V_g),
+\label{eq:bc-front}
+\end{equation}
+
+数值上可用伏特表示。背面 $z=L$ 取零电场（绝缘缓冲）：
+
+\begin{equation}
+\der{\Ec}{z}\bigg|_{z=L} \;=\; 0.
+\label{eq:bc-back}
+\end{equation}
+
+界面的带阶台阶按 \crefeq{eq:offset} 施加。此处有一个易错点：若把 $\dEc$ 的符号
+取反，沟道侧导带会被\emph{抬高}而非压低，势阱随之消失。本模块的实现
+以势垒侧为参考，沟道侧低 $\dEc$。
+
+\section{离散化}
+\label{sec:sp1d-discretisation}\index{3method@方法!discretisation@离散化}
+
+\subsection{面基界面：异质界面是一个"面"，不是一个节点}
+\label{sec:sp1d-face}\index{3method@方法!face-based interface@面基界面}
+
+本模块最关键的离散化决策是：\textbf{让异质界面精确落在网格单元之间的面上，
+而不是落在某个节点上}。网格节点位于 $d-h/2$ 与 $d+h/2$ 两处，由此
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.25em,topsep=0.3em]
+  \item 导带带阶台阶 $\dEc$、
+  \item 介电常数跃变 $\epsr^{b}\to\epsr^{c}$、
+  \item 有效质量跃变 $\meff_{b}\to\meff_{c}$、
+  \item 极化面电荷 $\sigeff$
+\end{itemize}
+
+\noindent
+四件事\emph{同时}落在单元边界上。若改为把界面压在节点上，这四件事都会被
+以 $O(h)$ 的分辨率抹平，\emph{并且直接吃掉耦合求解的一阶收敛精度} ——
+实测结果是从二阶（$p\approx2.08$）退化到一阶（$p\approx1.0$），
+详见 \S\ref{sec:sp1d-verification}。因此网格构造函数在必要时会主动拒绝
+不合法的输入：当 $d\le h_{\text{fine}}/2$ 时抛出异常，因为此时无法把界面
+放到面上。
+
+该决策的另一个后果是：每个单元都完全位于\emph{单一材料}之内，于是中点求积
+是二阶的；若界面压在节点上，界面两侧的单元会跨材料，中点求积降为一阶。
+
+\subsection{非均匀网格上的有限体积 Poisson 离散}
+\label{sec:sp1d-fv}\index{3method@方法!control volume@控制体}
+
+设节点 $z_1<\dots<z_N$，面间距 $h_i=z_{i+1}-z_i$，单元控制体宽度取
+
+\begin{equation}
+w_i \;=\;
+\begin{cases}
+\tfrac12 h_1, & i=1,\\[2pt]
+\tfrac12 (h_{i-1}+h_i), & 1<i<N,\\[2pt]
+\tfrac12 h_{N-1}, & i=N,
+\end{cases}
+\label{eq:cv-width}
+\end{equation}
+
+面上的介电系数取两侧的\emph{长度加权串联平均}
+
+\begin{equation}
+c_i \;=\; \frac{\epsface_i\,\epsO}{h_i},
+\qquad
+\epsface_i \;=\; \frac{2}{\dfrac{1}{\epsri{i}}+\dfrac{1}{\epsri{i+1}}}.
+\label{eq:face-coeff}
+\end{equation}
+
+当材料边界恰好落在该面上时，\crefeq{eq:face-coeff} 正是两个半单元电容的
+精确串联组合；在材料均匀处它退化为普通平均。算子 $\mat{L}$ 的第 $i$ 行为
+
+\begin{equation}
+(\mat{L}\Ec)_i \;=\;
+-c_{i-1}\Eci{i-1} \;+\; (c_{i-1}+c_i)\Eci{i} \;-\; c_i\Eci{i+1},
+\qquad 1<i<N,
+\label{eq:L-row}
+\end{equation}
+
+首行与末行分别为 Dirichlet 与零电场条件：
+
+\begin{equation}
+(\mat{L}\Ec)_1 = \Eci{1},
+\qquad
+(\mat{L}\Ec)_N = -c_{N-1}\Eci{N-1} + c_{N-1}\Eci{N} .
+\label{eq:L-bc}
+\end{equation}
+
+对分片线性解，该格式是\emph{精确的}（见 \S\ref{sec:sp1d-verification} 中
+双介质平行板基准）。
+
+\subsection{界面面电荷的精确消去}
+\label{sec:sp1d-sheet}\index{1concept@概念!sheet charge@面电荷}\index{3method@方法!series permittivity average@介电常数串联平均}
+
+面电荷落在面上，因此它不进入 $\mat{L}$，而是被\emph{消去}进右端常数项。
+记界面所在面的两侧为节点 $k$（势垒侧）与 $k+1$（沟道侧），界面电位为 $E_I$，
+则两个单侧通量为
+
+\begin{equation}
+G^{-} = \epsr^{b}\epsO\,\frac{E_I-\Ec^{(k)}}{h/2},
+\qquad
+G^{+} = \epsr^{c}\epsO\,\frac{\Ec^{(k+1)}-E_I}{h/2},
+\qquad
+G^{+}-G^{-} = \sigeff .
+\label{eq:sheet-flux}
+\end{equation}
+
+由 \crefeq{eq:sheet-flux} 解出 $E_I$ 并回代，可验证线性算子 $\mat{L}$ 的形式
+\emph{完全不变}，面电荷则被分配为两个节点的源项：
+
+\begin{equation}
+b_k \mathrel{+}= \sigeff\,\frac{\epsr^{b}}{\epsr^{b}+\epsr^{c}},
+\qquad
+b_{k+1} \mathrel{+}= \sigeff\,\frac{\epsr^{c}}{\epsr^{b}+\epsr^{c}} .
+\label{eq:sheet-split}
+\end{equation}
+
+两个权重之和恒为 $\sigeff$，这是格式自洽的必要条件。常见的"50/50 对分"
+只是 $\epsr^{b}=\epsr^{c}$ 的极限情形，在 AlGaN/GaN 上并不成立
+（$\epsr^{b}$ 随 Al 组分在 $\sim8.5$–$9.5$ 之间，而 $\epsr^{c}=9.5$），
+故本模块采用 \crefeq{eq:sheet-split} 的精确权重。
+
+\subsection{BenDaniel--Duke 算子的对称化}
+\label{sec:sp1d-bdd}\index{3method@方法!symmetrisation@对称化}
+
+将 \crefeq{eq:schrodinger} 在控制体上积分，并用 \crefeq{eq:cv-width} 的宽度离散，
+得广义本征问题。为把它化为\emph{标准对称}本征问题，作变量替换
+
+\begin{equation}
+v_i \;\equiv\; \sqrt{w_i}\,\psi_i ,
+\label{eq:symmetrise}
+\end{equation}
+
+并定义面系数
+
+\begin{equation}
+t_i \;=\; \frac{\hb^{2}}{2\mO}\cdot\frac{\mO}{\bar m_i}\cdot\frac{1}{h_i},
+\qquad
+\frac{1}{\bar m_i} \;=\; \frac12\!\left(\frac{1}{\meff_i}+\frac{1}{\meff_{i+1}}\right),
+\label{eq:t-coeff}
+\end{equation}
+
+则对称三对角矩阵 $\mat{A}$ 的两条带为
+
+\begin{equation}
+A_{ii} \;=\; \frac{t_{i-1}+t_i}{w_i} \;+\; \Ecifl{i},
+\qquad
+A_{i,i+1} \;=\; A_{i+1,i} \;=\; -\frac{t_i}{\sqrt{w_i\,w_{i+1}}} .
+\label{eq:A-bands}
+\end{equation}
+
+于是 \crefeq{eq:schrodinger} 化为 $\mat{A}\mat{v}=\Ei\mat{v}$，可直接调用对称
+三对角本征求解器。对称性不是美学选择，而是\emph{后续精确 Jacobian 的前提}：
+波函数响应需要对三对角 Hamilton 的正交 resolvent 做一次消元
+（\S\ref{sec:sp1d-resolvent}），只有对称形式才能保证该消元的良态与规范选择的
+自由度。此外，离散化只在\emph{一个函数}中写定，薛定谔求解与两条响应路径
+共用它，因此\emph{导数不可能漂移到它所微分的算子之外}。
+
+界面在有效质量上的处理已由 \crefeq{eq:t-coeff} 的调和平均隐含：
+$\bar m_i$ 取两侧的调和平均，等价于 $(1/\meff)\dd\psi/\dd z$ 连续这一
+BenDaniel--Duke 界面条件 \cite{benDaniel1966}。
+
+\subsection{子带态密度质量}
+\label{sec:sp1d-mass}\index{2qty@物理量!density-of-states mass@态密度有效质量}
+
+\crefeq{eq:occupation} 中的 $\meff_i$ 不是材料的 $\meff(z)$，而是该亚带自身的
+态密度有效质量，定义为材料质量在波函数概率密度下的调和平均：
+
+\begin{equation}
+\frac{1}{\meff_i} \;=\; \sum_{z} \frac{\abs{\psi_i(z)}^{2}\,w(z)}{\meff(z)}
+\qquad\Longleftrightarrow\qquad
+\meff_i \;=\; \frac{1}{\sum_z \abs{\psi_i(z)}^{2}w(z)/\meff(z)} .
+\label{eq:subband-mass}
+\end{equation}
+
+对势垒穿透显著的亚带，\crefeq{eq:subband-mass} 给出的质量明显高于沟道材料值，
+这是波函数部分位于势垒层（$\meff_{b}>\meff_{c}$）的直接结果。
+
+\crefeq{eq:subband-mass} 在形式上很不起眼，但它是精确 Jacobian 的一个\emph{必需}
+组成项：$\meff_i$ 依赖 $\psi_i$，而 $\psi_i$ 依赖 $\Ec$，故
+$\partial n_i/\partial\Ec$ 中含有一条通过 $\meff_i$ 的链。遗漏该项不是
+"小近似"，而是一个\emph{缺项}，其误差特征恰好是中心差分最能暴露的那种 ——
+\emph{不随差分步长下降的误差地板}，实测约 $1.3\times10^{-5}$
+（见 \S\ref{sec:sp1d-jacobian}）。
+
+\section{耦合求解与精确 Jacobian}
+\label{sec:sp1d-coupling}\index{3method@方法!self-consistent iteration@自洽迭代}
+
+\subsection{耦合残差与 Newton 系统}
+\label{sec:sp1d-residual}\index{3method@方法!Newton--Raphson}\index{6param@参数!tolerance\_eV}
+
+联立 \crefeq{eq:poisson} 与 \crefeq{eq:schrodinger}--\crefeq{eq:ns} 得到一个
+关于 $\Ec$ 的非线性代数系统。定义残差
+
+\begin{equation}
+\mat{R}(\Ec) \;=\; \mat{L}\Ec \;-\; q\,\mat{W}\,n[\Ec] \;+\; \mat{b},
+\label{eq:residual}
+\end{equation}
+
+其中 $\mat{W}=\diag(w_i)$（Dirichlet 行置零，因为该行不携带空间电荷），
+$\mat{b}$ 汇集了界面面电荷 \crefeq{eq:sheet-split} 与栅极值。
+自洽解即 $\mat{R}(\Ec^{\star})=\bm{0}$。
+
+求解策略有二，由参数 \akey{algorithm} 选择：
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.3em,topsep=0.35em]
+  \item \textbf{Newton 法（默认）}：以 $\mat{J}=\partial\mat{R}/\partial\Ec$
+        为 Jacobian，交由此 Deck 的 \akey{nonlinear} 槽解析出的求解服务
+        （\crefchap{ch:newton}）执行。收敛为二次，实测局部阶 $1.99$。
+  \item \textbf{Anderson 加速不动点（回退）}：把 $\Ec\mapsto\mat{L}^{-1}(q\mat{W}n[\Ec]-\mat{b})$
+        视作不动点映射，加 Anderson (Pulay) 加速 \cite{anderson1965}。
+        不需要协作者模块，用作交叉验证。
+\end{itemize}
+
+为何必须用 Newton：裸不动点映射的线性增益约为 $-30$ —— 面密度变化 $1\%$
+会使势阱深到让面密度再变化约 $30\%$。纯阻尼迭代要求阻尼因子小于 $0.06$，
+并需要数百次迭代；Newton 在个位数迭代内到达同一解。
+
+\subsection{响应算子的三项分解}
+\label{sec:sp1d-jacobian}\index{3method@方法!exact Jacobian@精确 Jacobian}\index{3method@方法!perturbation theory@一阶微扰论}
+
+由 \crefeq{eq:residual}，
+
+\begin{equation}
+\mat{J} \;=\; \mat{L} \;-\; q\,\mat{W}\,\der{n}{\Ec},
+\label{eq:jacobian}
+\end{equation}
+
+全部困难集中在 $\dd n/\dd\Ec$。它是\emph{稠密}矩阵（每个节点的势扰动都会
+影响每个节点的密度），且由三项构成，三项\emph{全部精确}：
+
+\paragraph{（i）亚带能量响应（主项）。}
+势扰动使每个亚带整体平移 $\avg{\psi_i|\delta\Ec|\psi_i}$，从而改变
+Fermi--Dirac 占据。由 \crefeq{eq:occupation}，
+
+\begin{equation}
+\der{n_i}{\Ei} \;=\; -\frac{A_i}{\kT}\,f_i \;=\; -\beta_i,
+\qquad
+f_i \;=\; \frac{1}{1+\ee^{\Ei/\kT}},
+\label{eq:beta}
+\end{equation}
+
+于是（$\avg{\psi_i|\delta\Ec|\psi_i}=\sum_z\abs{\psi_i(z)}^{2}w(z)\,\delta\Ec(z)$）
+
+\begin{equation}
+\boxed{\;
+\der{n}{\Ec}\bigg|^{(E)}_{z,z'}
+\;=\; -\sum_i \beta_i\,\abs{\psi_i(z)}^{2}\,\abs{\psi_i(z')}^{2}\,w(z')
+\;}
+\label{eq:resp-energy}
+\end{equation}
+
+这是一个秩 $n$ 更新（$n$ 为携带的亚带数），承载了主导物理：势阱深度与
+电荷之间的负反馈。
+
+\paragraph{（ii）波函数响应。}
+势扰动不仅平移能级，还\emph{混合}本征态。一阶微扰论给出
+
+\begin{equation}
+\delta\psi_i \;=\; \sum_{j\neq i} \psi_j\,
+\frac{\avg{\psi_j|\delta\Ec|\psi_i}}{\Ei-\Ej},
+\label{eq:psi-response}
+\end{equation}
+
+其对密度的贡献为 $\delta n_i^{(\psi)} = 2 n_i\,\psi_i\,\delta\psi_i$。
+\emph{关键之处在于 \crefeq{eq:psi-response} 的求和必须遍历整个谱，不能截断}：
+被携带的若干亚带之外，盒态连续谱同样对 $\delta\psi_i$ 有贡献。
+旧实现曾把该求和截断到携带的亚带集合内，结果 Jacobian 只能收敛到
+局部阶约 $1.5$，残差停在约 $5\times10^{-13}$ 而无法到达机器精度。
+
+\paragraph{（iii）态密度质量响应。}
+由 \crefeq{eq:subband-mass}，$\meff_i$ 亦依赖 $\psi_i$，因此
+
+\begin{equation}
+\delta\meff_i \;=\; -\,(\meff_i)^{2}\sum_z \frac{2\,\psi_i\,\delta\psi_i\,w(z)}{\meff(z)},
+\qquad
+\delta n_i^{(m)} \;=\; \frac{n_i}{\meff_i}\,\delta\meff_i .
+\label{eq:mass-response}
+\end{equation}
+
+该项数量级远小于前两项，却\emph{不可省略}：漏掉它会留下一个不随差分步长
+下降的误差地板（实测 $1.3\times10^{-5}$ 相对误差），并使得 Newton 的
+末位残差无法压缩到机器精度。
+
+\subsection{正交 resolvent 与秩-1 亏格}
+\label{sec:sp1d-resolvent}\index{3method@方法!rank-1 deflation@秩-1 亏格}\index{3method@方法!Sherman--Morrison 公式}\index{3method@方法!pseudo-inverse@伪逆}
+
+\crefeq{eq:psi-response} 的全谱求和在数值上不可直接实施（$O(N^{3})$ 且需要
+完整本征分解）。把它写进对称化变量 $v=\sqrt{w}\,\psi$ 后，该求和恰好是
+三对角 Hamilton 在携带态之外的正交 resolvent：
+
+\begin{equation}
+\sum_{j\neq i}\frac{v_j v_j\T}{\Ei-\Ej}
+\;=\; -\sum_{k\neq i}\frac{v_k v_k\T}{E_k-\Ei}
+\;=\; -\!\left(\mat{A}-\Ei\mat{I}\right)^{\dagger},
+\label{eq:resolvent}
+\end{equation}
+
+$\dg$ 记 Moore--Penrose 伪逆。求伪逆的障碍是 $\mat{A}-\Ei\mat{I}$ 奇异
+（$v_i$ 张成其零空间）。秩-1 的 Sherman--Morrison 公式
+\cite{shermanMorrison1950} 给出
+
+\begin{equation}
+\mat{B} = \mat{A}-\Ei\mat{I}+\sigma\,v_i v_i\T
+\qquad\Longrightarrow\qquad
+\mat{B}^{-1} = \frac{1}{\sigma}v_i v_i\T - \left(\mat{A}-\Ei\mat{I}\right)^{\dagger},
+\label{eq:woodbury}
+\end{equation}
+
+即伪逆与一个可逆矩阵的逆只差一个秩-1 项。\footnote{秩-$k$ 的推广通常归于
+Woodbury 1950 年的普林斯顿技术报告（Memorandum Report 42）；本模块只用到
+秩-1 形式，故仅引用 \cite{shermanMorrison1950}。}
+
+本模块\emph{不}选取正则化参数 $\sigma$，而是改用\textbf{固定规范}，从而
+完全避开 $\sigma$ 的选择问题：在 $\abs{v_i}$ 最大的节点处摘掉矩阵的行与列
+（束缚态零空间向量的每个分量都非零，故任一节点皆可），并把该分量钉为零。
+缩减后的三对角块非奇异，其解 $x_g$ 精确满足
+
+\begin{equation}
+\left(\mat{A}-\Ei\mat{I}\right)x_g = \bm{b} - (v_i\T\bm{b})\,v_i ,
+\label{eq:gauge-system}
+\end{equation}
+
+再减去零空间分量即得伪逆作用：
+
+\begin{equation}
+\boxed{\;
+\left(\mat{A}-\Ei\mat{I}\right)^{\dagger}\bm{b}
+\;=\; x_g - (v_i\T x_g)\,v_i
+\;}
+\label{eq:pseudoinverse}
+\end{equation}
+
+\subsection{块右端 Thomas 与复杂度}
+\label{sec:sp1d-thomas}\index{3method@方法!Thomas algorithm@Thomas 算法}\index{3method@方法!block right-hand side@块右端}
+
+\crefeq{eq:pseudoinverse} 要求伪逆的\emph{全部 $N$ 列}。关键在于：三对角消元
+（Thomas 算法）的消元系数只依赖矩阵本身，与右端无关，因此一次分解即可服务
+全部 $N$ 列。本模块把 Thomas 求解器扩展为接受\emph{块右端} $(N\times N)$，
+一次前消、$N$ 列同时回代，于是
+
+\begin{equation}
+\text{代价} \;=\; O(N^{2})\ \text{每亚带},
+\qquad\text{对比全谱本征矢求和的}\ O(N^{3}).
+\label{eq:complexity}
+\end{equation}
+
+此外，伪逆的右端具有特殊结构：第 $j$ 列为 $\bm{e}_j - v_{i,j}v_i$（规范行置零），
+因此无需显式构造单位阵的每一列。
+
+为保证正确性，本模块同时保留一条\emph{独立}实现路径
+（\texttt{quantum\_response\_jacobian\_reference}），用 $O(N^{3})$ 的全谱
+本征矢求和计算同一个 $\dd n/\dd\Ec$。两条路径共享其余全部装配代码，
+\emph{只}在 resolvent 的求法上不同，因此二者的任何分歧都孤立地指向秩-1 亏格
+这一处。测试断言二者在舍入误差内一致。
+
+另有一道防御：亏格的前提是 $v_i$ 确实零化 $\mat{A}-\Ei\mat{I}$。若调用者
+用手工拼装的过期状态（势剖面与算符不匹配）传入，会得到一个\emph{看起来合理
+但毫无意义}的 Jacobian。因此装配前有一道本征对一致性守卫，直接抛出异常
+而不是静默继续。
+
+\subsection{热启动与初值}
+\label{sec:sp1d-warmstart}\index{3method@方法!warm start@热启动}\index{3method@方法!Fang--Howard 变分形状}\index{3method@方法!bisection@二分法}\index{6param@参数!gamma0\_eV\_m43}
+
+初值只影响收敛速度而不影响收敛结果（有测试证明，见 \S\ref{sec:sp1d-verification}），
+但一个接近解的初值对 Newton 的稳健性至关重要。热启动分两步。
+
+\paragraph{第一步：耗尽近似给出面密度估计。}
+用二分法求解标量电荷控制关系
+
+\begin{equation}
+\begin{aligned}
+\ns &= \mathrm{DOS}\cdot\bigl(W(\ns) - E_0(\ns)\bigr),\\[2pt]
+W(\ns) &= q\!\left(\sigeff-q\ns\right)\frac{d}{\epsr^{b}\epsO} - q(\phib-\dEc),
+\qquad
+E_0(\ns)=\gamma_0\,\ns^{2/3},
+\end{aligned}
+\label{eq:depletion-seed}
+\end{equation}
+
+其中三角阱基态项 $E_0=\gamma_0\ns^{2/3}$ 取自 Ambacher 等的电荷控制模型
+\cite{ambacher2000}。右端关于 $\ns$ 单调下降，故二分法总能夹住根。
+需强调：\crefeq{eq:depletion-seed} 给出的是\emph{解析模型}的答案，
+它与自洽解\emph{不同}（同器件下面密度相差 $+4.95\%$，见
+\S\ref{sec:sp1d-verification}），此处仅用作起点。
+
+\paragraph{第二步：Fang--Howard 变分形状给出一致剖面。}
+以 Fang--Howard 变分波函数形状 \cite{fangHoward1966}
+
+\begin{equation}
+\abs{\psi_{\mathrm{FH}}(z)}^{2} \;\propto\; \tfrac12 b^{3}(z-d)^{2}\ee^{-b(z-d)},
+\qquad
+b \;=\; \left(\frac{33\,\meff_{c}q^{2}\ns}{8\,\epsr^{c}\epsO\hb^{2}}\right)^{1/3},
+\label{eq:fang-howard}
+\end{equation}
+
+构造初始体密度，做\emph{一次线性} Poisson 求解得到初始 $\Ec$ 剖面。
+由于 \crefeq{eq:poisson} 此时已包含界面面电荷，初值本身就带有一个成形的势阱，
+Newton 只需修正其形状。
+
+\subsection{Anderson 回退与密度钳制}
+\label{sec:sp1d-anderson}\index{3method@方法!Anderson acceleration@Anderson 加速}\index{3method@方法!fixed-point iteration@不动点迭代}\index{6param@参数!density\_clamp}
+
+Anderson 加速器作用在不动点映射 $g$ 上：令残差 $r_k = g(x_k)-x_k$，
+以历史增量 $\Delta\mat{X}$、$\Delta\mat{R}$ 求解最小二乘问题
+$\gamma = \argmin\norm{\Delta\mat{R}\,\gamma - r_k}_2$，再做
+
+\begin{equation}
+x_{k+1} \;=\; x_k + \beta\,r_k - \left(\Delta\mat{X}+\beta\,\Delta\mat{R}\right)\gamma .
+\label{eq:anderson}
+\end{equation}
+
+当最小二乘解病态（$\norm{\gamma}_\infty$ 超过阈值或非有限）时，清空历史并
+退回纯阻尼步。自适应阻尼在残差连续三次变差时把 $\beta$ 减半，下限为
+\akey{mixing_min}。
+
+\textbf{密度钳制默认关闭}，这是一个刻意的决定。把 $\ns$ 钳制在
+$[0,\nsu]$ 上看似是"物理保险"，但把密度\emph{正好钉在}上界会制造一个
+\emph{伪不动点}：两种迭代都可能卡死其上（实测确认）。因此它只作为
+最后手段的守卫保留，且\emph{不进入 Jacobian} —— 钳制是不连续的，
+对它在边界处求导没有意义。
+
+\section{验证与基准}
+\label{sec:sp1d-verification}\index{3method@方法!verification@验证}\index{1concept@概念!convergence order@收敛阶}
+
+本模块的验证策略是分层的：子求解器对\emph{闭式解}，耦合系统对\emph{收敛阶}，
+导数对\emph{中心差分}与\emph{独立实现}。所有基准都在
+\fpath{tests/test_quantum_sp1d.py} 中以断言形式固化。
+
+\subsection{子求解器对闭式解}
+
+\begin{veriftable}{Poisson 与 Schrödinger 子求解器的闭式解基准}{tab:sp1d-closed-form}
+\vgroup{Poisson 算子（\S\ref{sec:sp1d-fv}--\S\ref{sec:sp1d-sheet}）}
+\vrow{双介质平行板（无面电荷）}{$<10^{-10}$\U{V}}{$<10^{-10}$\U{V}（分片线性精确）}
+\vrow{双介质平行板 $+$ 界面面电荷}{$<10^{-10}$\U{V}}{$<10^{-10}$\U{V}（精确，验证 \crefeq{eq:sheet-split} 的权重）}
+\vrow{$\Ec$ 算子 vs.\ $\varphi$ 形式独立离散化}{$<10^{-10}$\U{eV}}{
+  $2.9\times10^{-13}$\U{eV}}
+\vgroup{Schrödinger 算子（\S\ref{sec:sp1d-bdd}）}
+\vrow{无限深方阱 $E_n=n^{2}\pi^{2}\hb^{2}/(2\meff L^{2})$}{二阶收敛}{二阶收敛（相邻误差比 $3$--$5$）}
+\vrow{谐振子 $E_n=\hb\omega(n+\tfrac12)$}{$<10^{-3}$\U{eV}}{$<10^{-3}$\U{eV}}
+\vrow{三角阱 Airy 零点 $E_n=\abs{\zeta_n}(\hb^{2}F^{2}/2\meff)^{1/3}$}{二阶收敛}{
+  $5.5\times10^{-5}\to3.4\times10^{-6}$（加密一档）}
+\end{veriftable}
+
+\subsection{导数：精确性而非近似性}
+
+\begin{veriftable}{耦合 Jacobian 的精确性证据}{tab:sp1d-jacobian}
+\vrow{三项完整 Jacobian 对中心差分}{相对误差小}{$\sim10^{-11}$（即差分公式本身的噪声水平）}
+\vrow{秩-1 亏格 vs.\ 全谱本征矢求和}{$<10^{-9}$}{$4.0\times10^{-13}$}
+\vrow{亏格伪逆的定义检验
+     $\left(\mat{A}-\Ei\right)\mat{G}=\mat{I}-v_iv_i\T$ 且 $v_i\T\mat{G}=\bm{0}$}{$<10^{-9}$}{通过（逐亚带）}
+\vrow{\emph{截断}波函数响应时的误差地板}{---}{
+  $1.3\times10^{-5}$，\textbf{不随差分步长下降}（即"缺项"的特征）}
+\vnote{最后一行是反例基准：它记录的是\emph{错误}实现的症状，用于说明为何
+       \crefeq{eq:mass-response} 与全谱求和不可省略。}
+\end{veriftable}
+
+\subsection{耦合系统的收敛阶}
+
+\begin{veriftable}{耦合系统的收敛性与不变量}{tab:sp1d-convergence}
+\vrow{\textbf{竖直间距收敛阶}（Richardson 三档）}{$p>1.7$}{\textbf{$p\approx2.08$}
+     （面基界面之前为 $\approx1.0$）}
+\vrow{\textbf{耦合 Newton 局部收敛阶}}{$>1.9$}{\textbf{$1.99$}
+     （三项完整；截断 Jacobian 时仅 $\approx1.5$）}
+\vrow{Newton 末位残差}{$<10^{-13}$\U{eV}}{$1.3\times10^{-16}$\U{eV}（机器精度）}
+\vrow{Newton vs.\ Anderson 同一答案}{相对差 $<5\times10^{-3}$}{通过（钳制使命中值略偏内）}
+\vrow{Newton 迭代数优势}{$\text{it}_{\mathrm{N}}\times5<\text{it}_{\mathrm{A}}$}{
+  Newton $10$ 次 vs.\ Anderson $60$ 次，落到同一位数}
+\vrow{热启动无关性（$0.35\sigeff/q\to0.95\sigeff/q$）}{相对差 $<5\times10^{-3}$}{$<0.5\%$}
+\vrow{求解域深度无关性（$30\to120$\U{nm}）}{相对差 $<10^{-3}$}{$8\times10^{-6}$}
+\vrow{竖直加密不变性}{相对差 $<10^{-2}$}{通过}
+\vrow{面密度低于极化上界 $\nsu$}{$\ns\le\nsu$}{占据率 $0.83$}
+\vrow{温度趋势（$77$ vs.\ $300$\U{K}）}{$0.9\ns^{300}<\ns^{77}\le\ns^{300}$}{通过}
+\vrow{负栅压耗尽沟道}{$\ns(-4\,\mathrm{V})<\ns(0\,\mathrm{V})$}{通过}
+\end{veriftable}
+
+\noindent
+\textbf{域深度无关性}一项值得单独说明：盒态连续谱是有限求解域的产物，
+其\emph{单个}波函数并非物理的束缚态。该基准证明它们作为三维连续态的
+\emph{求积}是合法的 —— 域深度扩大四倍，面密度只变 $8\times10^{-6}$。
+
+\subsection{与解析模型的对照}
+
+同一个器件（Al$_{0.25}$Ga$_{0.75}$N/GaN，$20$\U{nm} 势垒，
+$L_g=150$\U{nm}，屏蔽因子 $0.8$）下，解析三角阱与自洽解的差别具有
+明确的\emph{物理形态}：
+
+\begin{veriftable}{自洽解与解析三角阱的对照（同器件）}{tab:sp1d-vs-analytic}
+\vrow{量}{解析三角阱}{自洽 SP（差）}
+\vrow{$\ns$ (\U{cm^{-2}})}{$7.58287\times10^{12}$}{$7.95848\times10^{12}$（$+4.95\%$）}
+\vrow{$\sigeff/q$ 占据率}{$0.7886$}{$0.8276$（$+4.95\%$）}
+\vrow{$\Ef$ 距界面带边 (\U{eV})}{$0.461018$}{$0.308840$（$-33.0\%$）}
+\vrow{$E_0$ 距界面带边 (\U{eV})}{$0.380340$}{$0.229336$（$-39.7\%$）}
+\vrow{$\Ef-E_0$ (\U{eV})}{$0.0806778$}{$0.0795039$（$-1.46\%$）}
+\end{veriftable}
+
+\noindent
+两个模型对\emph{势}的看法差别很大（$\Ef$ 与 $E_0$ 都掉了约三分之一），
+但对\emph{统计}的看法收敛到同一处：决定 $\ns$ 的亚带间距 $\Ef-E_0$
+只差 $1.46\%$。这一形态本身就是结论 —— 自洽解给出的势阱更浅，
+而其占据由几乎相同的亚带间距支配。
+
+自洽解还给出解析模型根本不具备的量：多亚带阶梯、波函数向势垒的穿透、
+由 \crefeq{eq:subband-mass} 决定的真实态密度质量、束缚态数目、
+波函数质心与均方根展宽。
+
+\subsection{代价的如实记录}
+
+精确 Jacobian 不是免费的。装配代价比旧的截断版本高约一个数量级：
+
+\begin{veriftable}{精确 Jacobian 的装配代价}{tab:sp1d-cost}\index{1concept@概念!assembly cost@装配代价}
+\vrow{网格节点数}{装配（截断 $\to$ 精确）}{整解耗时比}
+\vrow{$119$}{$0.6\to5.1$\U{ms}}{$85\to145$\U{ms}（$1.7\times$）}
+\vrow{$208$}{$1.3\to16.5$\U{ms}}{$300\to460$\U{ms}（$1.5\times$）}
+\vrow{迭代数与线性求解次数}{不变}{不变}
+\vnote{计时口径：同机交错计时取 $7$ 次最小值。买到的是一致性
+      （\crefchap{ch:transport_dd} 误差预算的前提），\emph{不是}更少的迭代。
+      两条后续提速路线见 \S\ref{sec:sp1d-limits}。}
+\end{veriftable}
+
+\section{误差来源与适用边界}
+\label{sec:sp1d-limits}\index{1concept@概念!validity limits@适用边界}
+
+\limitsheading
+
+\begin{bounds}
+  \item \textbf{材料常数未经独立验证。} 极化常数、弹性常数、带隙与有效质量
+        转录自文献 \cite{ambacher2000,vurgaftman2003,bernardini1997,dreyer2016}，
+        在材料库中标记为 \texttt{unverified}。在通过 Hall 基准（L2）之前，
+        \emph{绝对数值不可信}，可断言的是格式与趋势。
+
+  \item \textbf{屏蔽因子没有公认取值。} 参数 \akey{screening}（默认 $0.8$）\index{6param@参数!screening}
+        吸收了表面态屏蔽的全部未知物理，是极化链上最大的不确定度来源，
+        必须用 Hall 数据标定。
+
+  \item \textbf{有效质量近似，忽略非抛物性。} 导带被假定为抛物型；
+        AlGaN/GaN 的强极化使非抛物性不可忽略，尤其是在高面密度下。
+        应变对有效质量的修正亦未计入。
+
+  \item \textbf{只有 $\Gamma$ 谷。} 参数 \akey{valley_degeneracy} 只缩放
+        态密度，不产生额外的能谷结构。
+
+  \item \textbf{势垒以上的态是有限域盒本征态。} 它们是三维连续态的合法求积
+        （域深度依赖 $<10^{-5}$），但\emph{单个}波函数不是物理的束缚态。
+        亚带数 \akey{n_subbands} 过少时\index{6param@参数!n\_subbands}，密度将成为势的粗糙泛函，
+        拖慢耦合迭代。
+
+  \item \textbf{一维近似。} 横向（短栅效应）、栅边缘场集中、源漏接入区
+        均不在模型内。这些属于 \crefchap{ch:transport_dd} 的二维域。
+
+  \item \textbf{Anderson 回退比 Newton 脆弱。} 更慢，且在部分网格上会因
+        密度钳制而卡住。默认算法是 Newton。
+
+  \item \textbf{精确 Jacobian 的装配较贵}（见 \creftab{tab:sp1d-cost}）。
+        两条正路已明确：(a) 三对角逆的半可分（semiseparable）Green 函数
+        两步扫描可把装配降到 $O(N)$ 次向量化运算；(b) 线性步改为
+        \emph{矩阵无关}的 Krylov 方法后，响应只需对向量作用
+        （每亚带一次三对角求解 $O(N)$），根本不必组装稠密矩阵。
+
+  \item \textbf{无陷阱、无自热、无量热耦合。} 因此电流坍塌、gate-lag、
+        drain-lag 一概不在本模块的适用范围。
+
+  \item \textbf{密度钳制默认关闭。} 其理由是数值的而非物理的：钳制会
+        制造伪不动点，见 \S\ref{sec:sp1d-anderson}。
+\end{bounds}
+
+\section{接口契约与小结}
+\label{sec:sp1d-interface}\index{5artifact@数据通道!quantum}\index{5artifact@数据通道!ns}\index{5artifact@数据通道!polarization}\index{1concept@概念!artifact contract@数据通道契约}
+
+\subsection{artifact 契约}
+
+本模块从上下文读取两个 artifact，写回两个。表中列出的字段名与代码中
+\texttt{ctx.put}/\texttt{ctx.require} 的实参逐字符一致。
+
+{\small
+\begin{longtable}{@{}p{0.06\textwidth} p{0.22\textwidth} p{0.62\textwidth}@{}}
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+入 & \akey{polarization} &
+  \akey{barrier_thickness_nm}, \akey{eps_r_barrier}, \akey{m_eff_barrier},
+  \akey{sigma_eff_C_m2}, \akey{x_al}, \akey{band_offset_eV},
+  \akey{channel_material}\\
+入 & \akey{materials} &
+  沟道材料的 \akey{eps_r}, \akey{m_eff}\\
+出 & \akey{quantum} &
+  契约键 \akey{ns_m2}, \akey{ns_cm2}, \akey{ef_eV}, \akey{e0_eV},
+  \akey{phi_b_eV}, \akey{delta_ec_eV}, \akey{converged}, \akey{iterations}；
+  另加亚带能级/质量/分密度、束缚态数、质心与展宽、残差历史、剖面等自洽细节\\
+出 & \akey{ns} & 标量面密度（\U{cm^{-2}}），供提取器直接消费\\
+\end{longtable}
+}
+
+契约键中的前七项与 \pid{physics.quantum.analytic_tw} 完全一致，这是
+\emph{即插即用}的机械保证：整个替换只需改动 Deck 中的一行模块绑定，
+\pid{extract.fom}（\crefchap{ch:fom}）与流水线均无须改动，因为下游只认
+artifact 键而不认实现。
+
+\subsection{小结}
+
+本章的核心结论可以概括为三点。
+
+其一，\textbf{异质界面必须作为"面"处理}。把带阶、介电跃变、质量跃变与面电荷
+四件事同时放到单元边界上，耦合求解才恢复二阶收敛（$p\approx2.08$）；
+压在节点上会同时损失精度与一个收敛阶。
+
+其二，\textbf{Jacobian 的精确性是可达的，但需要把三项都写对}。
+亚带能量响应、波函数响应（全谱、经秩-1 亏格降为 $O(N^{2})$）与态密度质量响应
+三者缺一不可。付清这笔账之后，Newton 的局部阶回到 $1.99$，
+末位残差落到机器精度 $1.3\times10^{-16}$。
+
+其三，\textbf{格式可信与数值可信是两件事}。本模块的离散格式有闭式解与收敛阶
+背书，但绝对数值受制于未标定的材料常数与屏蔽因子。这一区分在本文档中
+始终显式给出，不作合并陈述。
+
+\cleardoublepage

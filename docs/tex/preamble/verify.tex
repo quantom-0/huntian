@@ -1,0 +1,79 @@
+% =====================================================================
+%  verify.tex —— 验证基准表与边界清单
+%
+%  每个模块章的 §x.5 用 veriftable，§x.6 用 bounds。
+%  三列固定为：基准 | 判据 | 实测。
+%  "判据"列写测试断言的门槛，"实测"列写文档记录的实际观测值 —— 两者
+%  必须同时给出，否则读者无法判断余量，也无法在版本演化后复查。
+%
+%  ⚠ 实现约束（真因已查明，勿回退）：
+%  本环境在 begin 代码里开表、在 end 代码里闭表，配对跨越了
+%  \newenvironment 的边界。凡是"配对敏感"的构造一律不能用：
+%
+%    * \begin{tabularx}...\end{tabularx} —— 不可用。
+%      tabularx.sty:53 写的是
+%          \def\tabularx#1{\edef\TX@{\@currenvir}...\TX@get@body}
+%      它把"当前环境名"存进 \TX@，然后一路扫描直到 \end{<那个名字>}。
+%      在自定义环境里 \@currenvir 是 veriftable 而不是 tabularx，
+%      于是它去找 \end{veriftable}，把整章内容吞进表格。
+%      即便改用 \tabularx 原语也一样，因为它读的是 \@currenvir。
+%
+%    * \begin{table} / \@float —— 同样有环境边界记账问题。
+%
+%  结论：一律使用**不带环境记账的底层原语** \tabular ... \endtabular，
+%  配合非浮动的 \captionof（caption 宏包）。列宽用 \dimexpr 精确算到
+%  \textwidth，因此不需要 tabularx 的自适应 X 列。
+%  附带好处：表就地排版，永远跟着它所属的段落走，不会漂到别页。
+% =====================================================================
+
+% ---- 表注 ------------------------------------------------------------
+%  ⚠ 表注必须是表格里的一\emph{行}，不能是"表格末尾的一条空指令"。
+%  写成 \def 存文本、表后再印（旧做法）会踩到 TeX 的一个死角：
+%  在 \tabular 里，\\ 之后紧跟的下一个记号若不是 \noalign/\omit，
+%  LaTeX 就认为新行已经开始，于是随后的 \bottomrule 报
+%  "Misplaced \noalign"。
+%  因此这里让 \vnote 自己排成一行、并自己以 \\ 收尾：
+%  它既是最后一行，也仍然是"完整的一行"，\bottomrule 便落在合法的
+%  \cr 之后。普通 tabular 里 \multicolumn 是安全的 —— 之前出事的是
+%  tabularx 的 X 列（见 modulecard.tex 文件头），两者不要混淆。
+\newcommand{\vnote}[1]{%
+  \multicolumn{3}{@{}p{\textwidth}@{}}{\footnotesize #1}\\}
+
+% ---- 验证基准表（非浮动）---------------------------------------------
+%  用法：\begin{veriftable}{题注}{label} ... \end{veriftable}
+\newenvironment{veriftable}[2]{%
+  \par\medskip\noindent
+  \begingroup
+  \small
+  \captionof{table}{#1}\label{#2}%
+  \par\nobreak\smallskip\noindent
+  \setlength{\tabcolsep}{5pt}%
+  \renewcommand{\arraystretch}{1.18}%
+  \tabular{@{}p{\dimexpr\textwidth-72mm-4\tabcolsep\relax} p{34mm} p{38mm}@{}}
+  \toprule
+  \textbf{基准} & \textbf{判据} & \textbf{实测}\\
+  \midrule
+}{%
+  \bottomrule
+  \endtabular
+  \par\endgroup
+  \medskip
+}
+
+%  基准行：基准名 | 判据 | 实测
+\newcommand{\vrow}[3]{#1 & #2 & #3 \\}
+
+%  分组标题行：不用 \multicolumn（tabular 里虽可用，但保持与列宽一致）
+\newcommand{\vgroup}[1]{\textit{#1} & & \\}
+
+% ---- 边界清单 --------------------------------------------------------
+%  用法：\begin{bounds} \item ... \end{bounds}
+%  注意：不要把它命名为 limits —— \limits 是 TeX 原语，会撞名。
+\newenvironment{bounds}{%
+  \begin{itemize}[leftmargin=1.7em,itemsep=0.28em,topsep=0.35em,parsep=0pt]
+}{%
+  \end{itemize}
+}
+
+%  "已知边界"小节标题的统一样式
+\newcommand{\limitsheading}{\medskip\noindent\textbf{适用边界与已知局限}\par\nobreak\smallskip}

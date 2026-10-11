@@ -1,0 +1,104 @@
+% !TeX program = xelatex
+% =====================================================================
+%  main.tex —— 文档根文件
+%
+%  本文件不写正文，只做三件事：装宏包、按序 \input、印全局部件。
+%  "一个插件一个模块章"的模块化就落在 modules/ 下的 \input 清单上：
+%  增删一个模块 = 增删一行。
+% =====================================================================
+
+\documentclass[
+  UTF8,
+  12pt,
+  oneside,
+  openany,
+  fontset=windows
+]{ctexbook}
+
+\input{preamble/packages}
+\input{preamble/style}
+\input{preamble/math}
+\input{preamble/refs}
+\input{preamble/modulecard}
+\input{preamble/verify}
+
+% ---- 全局元数据 ------------------------------------------------------
+\title{\bfseries Huntian\\[0.3em]
+       \large GaN 射频 HEMT 轻量化 TCAD 内核\\[0.15em]
+       \large 模块化技术文档}
+\author{Huntian 项目组}
+\date{文档版本 0.1（P0 骨架）\\ 2026 年 10 月}
+
+\begin{document}
+
+% =====================================================================
+\frontmatter
+% =====================================================================
+\maketitle
+\tableofcontents
+
+\input{frontmatter/abstract}
+\input{frontmatter/notation}
+\input{frontmatter/conventions}
+\input{frontmatter/outline}
+
+% =====================================================================
+\mainmatter
+% =====================================================================
+
+% ---------------------------------------------------------------------
+%  第一部分  总论
+%  至此没有前向标签了：19 章全部由真实章节产生编号。
+%  frontmatter/future_labels.tex 已随之删除。
+% ---------------------------------------------------------------------
+\part{总论}
+\input{overview/intro}                 % 第 1 章   引言与文档范围
+\input{overview/architecture}          % 第 2 章   系统架构
+\input{overview/dataflow}              % 第 3 章   数据流与 artifact 契约
+\input{overview/verification}          % 第 4 章   验证方法学
+\input{overview/module_index}          % 第 5 章   模块索引与依赖关系
+
+% ---- 第二部分 -------------------------------------------------------
+\part{网格与材料}
+\input{modules/mesh_structured2d}      % 第 6 章   mesh.structured2d            v0.1.0
+\input{modules/materials_dft}          % 第 7 章   materials.dft                 v0.1.0
+
+% ---- 第三部分 -------------------------------------------------------
+\part{极化与量子}
+\input{modules/polarization_ambacher}  % 第 8 章   physics.polarization.ambacher v0.1.0
+\input{modules/quantum_analytic_tw}    % 第 9 章   physics.quantum.analytic_tw   v0.1.0
+\input{modules/quantum_sp1d}           % 第 10 章  physics.quantum.sp1d          v1.1.1
+
+% ---- 第四部分 -------------------------------------------------------
+\part{输运与提取}
+\input{modules/transport_dd}           % 第 11 章  transport.dd                  v0.1.0
+\input{modules/extract_fom}            % 第 12 章  extract.fom                   v0.1.0
+
+% ---- 第五部分 -------------------------------------------------------
+%  服务模块用变体模板：§x.1 卡片改记 capabilities 与调用契约
+%  （无 requires/produces），§x.2 换为「问题类定义」。
+\part{数值服务}
+\input{modules/nonlinear_newton}       % 第 13 章  nonlinear.newton              v1.0.0
+\input{modules/linear_blocktridiag}    % 第 14 章  linear.blocktridiag           v0.1.0
+
+% ---------------------------------------------------------------------
+%  附录 A--D
+%  \appendix 之后 \chapter 的编号变为 A/B/C/D，
+%  因此 \crefapp{app:...} 印作"附录 A"。
+% ---------------------------------------------------------------------
+\appendix
+\input{appendix/benchmarks}            % 附录 A  闭式解基准汇总
+\input{appendix/parameters}            % 附录 B  可标定参数总表
+\input{appendix/contracts}             % 附录 C  版本、指纹与 artifact 键矩阵
+\input{appendix/debts}                 % 附录 D  已知边界与欠账清单
+
+% =====================================================================
+\backmatter
+% =====================================================================
+%  只印被正文引用过的文献。refs.bib 中为后续章节预置的条目
+%  在对应章节成文之前不会出现在此列表中 —— 参考文献列表反映的是
+%  "本文档引用了什么"，不是"库房里有什么"。
+\printbibliography[heading=bibintoc,title={参考文献}]
+\printindex
+
+\end{document}

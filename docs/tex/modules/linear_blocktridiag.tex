@@ -1,0 +1,307 @@
+% module_id: linear.blocktridiag
+% module_version: 0.1.0
+% plugin_dir: plugins/linear_blocktridiag
+% source_files: plugins/linear_blocktridiag/{__init__,solver}.py
+% tests: tests/test_linear_blocktridiag.py
+%
+% 服务模块变体：§x.1 记 capabilities 与调用契约（无 requires/produces），
+% §x.2 换为「问题类定义」。
+
+\chapter{块三对角直接求解器}
+\label{ch:blocktridiag}
+
+\begin{quote}
+\small
+\noindent\textbf{模块标识}\quad\pid{linear.blocktridiag}\qquad
+\textbf{版本}\quad 0.1.0\qquad
+\textbf{类别}\quad solver
+\end{quote}
+
+\noindent
+本章记述第二个数值服务：一个针对\emph{块三对角}结构的直接求解器。
+它是 \crefchap{ch:transport_dd} 的线性步提供者，也是本项目"零第三方依赖"
+这一约束下最有信息量的一个工程决策 —— 设计稿原本指定用
+\texttt{scipy.sparse}，而部署环境只有 NumPy。本章说明为什么不退回稠密求解，
+以及一个纯 NumPy 的块消元为什么恰好够用。
+
+\section{模块契约}
+\label{sec:block-contract}
+\index{4module@模块!linear.blocktridiag}
+
+\begin{modulecard}{linear.blocktridiag}{0.1.0}
+  \cardrow{类别}{solver（数值服务，\textbf{不是}流水线阶段）}
+  \cardrow{能力}{linear, linear.blocktridiag}
+  \cardrow{依赖 artifact}{\textbf{无}}
+  \cardrow{产出 artifact}{\textbf{无}}
+  \cardrow{验证状态}{partially-verified}
+  \cardrow{源码}{\fpath{plugins/linear_blocktridiag/}}
+  \cardrow{测试}{\fpath{tests/test_linear_blocktridiag.py}}
+  \cardrow{可标定参数}{\textbf{无}（\akey{regularization} 是数值选项）}
+  \cardsep
+  \cardrow{调用契约}{\texttt{solve(lower, diagonal, upper, rhs, regularization=) -> (n,m)}
+    ；\texttt{dense(lower, diagonal, upper) -> (nm,nm)}（诊断用）}
+  \cardrow{解析方式}{经 Deck 的 \akey{linear} 槽配置；
+    也可由 \texttt{get\_by\_capability("linear")} 解析}
+  \cardrow{已知消费者}{\pid{transport.dd}（\crefchap{ch:transport_dd}）}
+  \cardrow{第三方依赖}{\textbf{无}（纯 NumPy；替代部署环境中缺失的 SciPy）}
+\end{modulecard}
+
+\section{问题类定义}
+\label{sec:block-problem}
+
+本模块求解的是如下形式的线性系统：
+
+\begin{equation}
+\mat{A}\,\bm{x} \;=\; \bm{b},
+\qquad
+\mat{A} \;=\; \operatorname{tridiag}\bigl(\mat{L}_j,\ \mat{D}_j,\ \mat{U}_j\bigr),
+\label{eq:block-system}
+\end{equation}
+
+其中 $\mat{D}_j\in\mathbb{R}^{m\times m}$ 是 $n$ 个对角块，
+$\mat{L}_j,\mat{U}_j\in\mathbb{R}^{m\times m}$（$j=1,\dots,n-1$）
+分别是下、上次对角块；右端按块行组织为 $\bm{b}\in\mathbb{R}^{n\times m}$。
+
+这一结构不是抽象的：\crefchap{ch:transport_dd} 的未知量按
+$(\psi,n)$ 交错、横向索引排在前，竖直方向只与相邻行耦合，
+于是\emph{块大小 $m=2n_x$、块行数 $n=n_z$}，Jacobian 天然是
+\crefeq{eq:block-system} 的形式。演示网格下 $n=1621$、$m=82$，
+总未知量 $132\,922$。
+
+\creftab{tab:block-vs-dense} 对比两条路线。稠密分解的代价随
+$(nm)^{3}$ 增长，对 $1.3\times10^{5}$ 个未知量完全不可行；
+块三对角结构把它降到 $n\,m^{3}$ —— 对同一个问题约六个数量级的差距。
+
+\begin{veriftable}{块三对角直接解与稠密解的代价对比（演示网格 $n=1621$, $m=82$）}{tab:block-vs-dense}
+\vrow{分解代价}{$O\bigl((nm)^{3}\bigr)$}{$O\bigl(n\,m^{3}\bigr)$}
+\vrow{按上式的量级比}{$1$}{$\approx 1/(nm)^{2}\approx 5.6\times10^{-11}$}
+\vrow{存储}{$O\bigl((nm)^{2}\bigr)\approx1.2\times10^{11}$ 字}{
+  $O\bigl(n\,m^{2}\bigr)\approx1.1\times10^{7}$ 字（三条带）}
+\vnote{表中数字只用于说明量级，不是实测计时。实际内存还取决于是否
+      保留中间消元结果；实现保留（\S\ref{sec:block-algorithm}），
+      因此实际占用是三条带的常数倍。}
+\end{veriftable}
+
+\section{算法}
+\label{sec:block-algorithm}
+\index{3method@方法!block Thomas elimination@块 Thomas 消元}
+
+\subsection{块消元}
+
+算法是标量 Thomas 消元（三对角消元，经典表述见 \cite{golub2013}）
+在块层面的推广。前消：
+
+\begin{equation}
+\begin{aligned}
+\mat{D}'_1 &= \mat{D}_1, &\qquad \bm{b}'_1 &= \bm{b}_1,\\
+\mat{D}'_j &= \mat{D}_j - \mat{L}_{j-1}\,\bigl(\mat{D}'_{j-1}\bigr)^{-1}\mat{U}_{j-1},
+&\qquad
+\bm{b}'_j &= \bm{b}_j - \mat{L}_{j-1}\,\bigl(\mat{D}'_{j-1}\bigr)^{-1}\bm{b}_{j-1},
+\end{aligned}
+\qquad j=2,\dots,n,
+\label{eq:block-forward}
+\end{equation}
+
+回代：
+
+\begin{equation}
+\bm{x}_n = \bigl(\mat{D}'_n\bigr)^{-1}\bm{b}'_n,
+\qquad
+\bm{x}_j = \bigl(\mat{D}'_j\bigr)^{-1}\bigl(\bm{b}'_j - \mat{U}_j\,\bm{x}_{j+1}\bigr),
+\qquad j=n-1,\dots,1.
+\label{eq:block-backward}
+\end{equation}
+
+\paragraph{一次分解，$m+1$ 个右端。} \crefeq{eq:block-forward} 的两行共享
+同一个矩阵 $\bigl(\mat{D}'_{j-1}\bigr)^{-1}$，实现上把
+$\bigl[\mat{U}_{j-1}\ \big|\ \bm{b}'_{j-1}\bigr]$ 拼成一个
+$m\times(m+1)$ 的右端块一次解出。这不是微优化：它把每步的
+\emph{分解次数}减半，而分解正是块消元的主导代价。同一个技巧在
+\crefchap{ch:sp1d} 的秩-1 亏格消元里也出现过（那里是 $N$ 列右端）。
+
+\paragraph{块主元由 LAPACK 选取。} 每个块主元的求逆走
+\texttt{numpy.linalg.solve}，即带\emph{部分主元}的 LU。
+这一点值得强调：它意味着本求解器\textbf{不依赖 Jacobian 是 M-矩阵}，
+也不依赖任何对角占优假设。对耦合 Newton 系统这是必要的 ——
+一旦通量依赖电位，M-矩阵性质很容易丢失，而"假设它成立"的求解器
+会在没有任何征兆的情况下给出错误的解。
+
+\subsection{对角正则化}
+
+可选的正则化把每个对角块平移：
+
+\begin{equation}
+\bigl(\mat{A} + \sigma\mat{I}\bigr)\bm{x} \;=\; \bm{b}
+\qquad\Longleftrightarrow\qquad
+\mat{D}_j \leftarrow \mat{D}_j + \sigma\mat{I}.
+\label{eq:block-regularization}
+\end{equation}
+
+\crefeq{eq:block-regularization} 与 \crefchap{ch:transport_dd} 的伪瞬态项
+$\sigma = V/\tau$ 是同一个操作。把它做成求解器的\emph{参数}而不是让
+调用方重建矩阵，使调用方可以在迭代过程中调整 $\tau$ 而不必重新装配
+整个 Jacobian —— \crefchap{ch:transport_dd} 的 PTC 状态机正是这样用的。
+
+\section{代价与复杂度}
+\label{sec:block-cost}
+\index{1concept@概念!M-matrix}
+
+\begin{equation}
+\text{时间}\ O\bigl(n\,m^{3}\bigr),
+\qquad
+\text{内存}\ O\bigl(n\,m^{2}\bigr)\ \text{（三条带）}.
+\label{eq:block-complexity}
+\end{equation}
+
+\subsection{两个诚实的限制}
+
+\textbf{（i）块是稠密存储的，因此横向加密是最贵的方向。}
+一条横向有 $200$ 个未知量的行，其每个带每 $1000$ 个竖直行约占
+$1.6$\U{MB}（$200^2\times8$ 字节 $\times1000$）。这意味着
+"加密 $n_x$"的代价是 $m^{3}$ 而"加密 $n_z$"只是线性 ——
+若将来需要横向细化，带状（banded）或嵌套剖分（nested dissection）
+分解是显然的下一步。
+
+\textbf{（ii）刻意\emph{不}提供迭代回退。}
+实现里没有 BiCGSTAB + ILU(0) 之类的迭代解法，理由是：
+它会引入\emph{第二套收敛性故事}（迭代解的收敛与外层 Newton 的收敛
+纠缠在一起），而两套收敛性同时需要调试时，定位问题会变得困难得多。
+若直接分解真的成为瓶颈，那才是伸手去取迭代解法的地方，
+而 Deck 的 \akey{linear} 槽正是替换件的绑定位置
+（迭代解法的教材参考见 \cite{saad2003}）。
+
+\section{验证与基准}
+\label{sec:block-verification}
+
+验证策略非常直接：\textbf{直接解可以精确对照}。每个算例都
+物化出稠密矩阵、用 \texttt{numpy.linalg.solve} 求解，再逐元素比较。
+构造用的是经典 M-矩阵方式（行和占优，位移 $4.0$），
+因此被比较的双方都是良态的。
+
+\begin{veriftable}{块三对角解对稠密解的逐例一致}{tab:block-verify}
+\vgroup{数值正确性（判据：与稠密解之差 $<10^{-10}$）}
+\vrow{$(n,m)=(2,2)$}{$<10^{-10}$}{通过}
+\vrow{$(n,m)=(5,3)$}{$<10^{-10}$}{通过}
+\vrow{$(n,m)=(9,4)$}{$<10^{-10}$}{通过}
+\vrow{$(n,m)=(17,6)$}{$<10^{-10}$}{通过}
+\vrow{单块（$n=1$）退化为稠密解}{$<10^{-12}$}{通过}
+\vrow{正则化等价于平移对角块}{$<10^{-10}$}{
+  通过（与显式构造的 $\mat{D}+\sigma\mat{I}$ 逐元素一致）}
+\vgroup{错误处理}
+\vrow{奇异块主元报出\textbf{所在行}}{异常信息含行号}{
+  通过（构造 $D_2=0$ 且无耦合，信息含 "row 1"）}
+\vrow{形状不合法被拒绝（\texttt{BlockTridiagonalError}）}{抛出异常}{
+  通过（三条带与右端的形状组合各测一例）}
+\vgroup{布局正确性}
+\vrow{\texttt{to\_dense} 的块布局}{上/下/对角块落在正确位置}{
+  通过（并断言远角为零）}
+\vgroup{服务契约}
+\vrow{声明 \akey{linear} 能力}{是}{通过（版本 $0.1.0$）}
+\vrow{按能力解析得到可用求解器}{可解且 \akey{last_solve} 记录未知量数}{
+  通过（$5$ 块 $\times3=15$ 个未知量）}
+\vrow{作为流水线阶段运行被拒绝}{抛 \texttt{RuntimeError}}{通过}
+\vrow{空注册中心报告能力缺失}{抛异常}{通过}
+\vnote{"奇异块主元报出所在行"这一条的价值不在报错本身，而在\emph{行号}：
+      它把"矩阵奇异"这一无从下手的诊断，变成"第 1 个块行有问题"
+      这一可操作的信息。}
+\end{veriftable}
+
+\subsection{在 \texorpdfstring{\crefchap{ch:transport_dd}}{第 11 章} 中的间接证据}
+
+本模块还有一层不在自身测试里的验证：它是 \crefchap{ch:transport_dd}
+的线性步提供者，因此后者的每一项端到端基准都同时是对本模块的检验。
+其中与线性代数直接相关的是耦合 Jacobian 的差分校验
+（$\sim10^{-10}$，逐行相对）—— 若块消元有符号或布局错误，
+Newton 根本不会收敛，更不会以二阶收敛。
+
+\section{误差来源与适用边界}
+\label{sec:block-limits}
+\index{1concept@概念!validity limits@适用边界}
+
+\limitsheading
+
+\begin{bounds}
+  \item \textbf{只处理块三对角，不处理一般稀疏。} 结构由调用方保证；
+        若把非三对角的耦合塞进三条带里，会得到\emph{无提示的错误解}
+        （矩阵装配正确但截断了耦合）。这是直接解固有的风险：
+        结构假设不被检查。
+
+  \item \textbf{块按稠密存储。} 横向加密的代价是 $m^{3}$，
+        见 \S\ref{sec:block-cost}。$n_x$ 很大的问题需要带状或
+        嵌套剖分分解。
+
+  \item \textbf{没有迭代回退，也没有条件数估计。} 病态系统会表现为
+        主元奇异（被捕获并报出行号），或者\emph{不报错但精度损失}。
+        后者无法从本模块内部察觉，只能由外层 Newton 的收敛行为暴露。
+
+  \item \textbf{正则化是标量且均匀的。} \crefeq{eq:block-regularization}
+        只支持一个全局 $\sigma$；逐块或逐未知量的正则化
+        （例如仅对连续性行加时间项）无法通过本接口表达。
+        \crefchap{ch:transport_dd} 因此把 PTC 项加在\emph{残差}层面
+        而不是线性步层面。
+
+  \item \textbf{无部分主元的跨块选主元。} 主元只在\emph{块内}由 LAPACK
+        选取；块之间不做选主元。因此它不像完全主元的高斯消元那样
+        对任意非奇异矩阵稳定，而是建立在"块对角占优或结构良好"
+        的常规前提上（这与标量 Thomas 消元的前提相同 \cite{golub2013}）。
+
+  \item \textbf{单线程、无 GPU。} 前消与回代都是串行循环，
+        每个块主元是一次独立的 LAPACK 调用。
+\end{bounds}
+
+\section{接口契约与小结}
+\label{sec:block-interface}
+
+{\small
+\begin{longtable}{@{}p{0.18\textwidth} p{0.24\textwidth} p{0.50\textwidth}@{}}
+\toprule
+\textbf{方向} & \textbf{名字} & \textbf{形状与语义}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{方向} & \textbf{名字} & \textbf{形状与语义}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+入 & \texttt{lower} & $(n-1,m,m)$；\texttt{lower[k]} 把块行 $k+1$ 耦合到块行 $k$\\
+入 & \texttt{diagonal} & $(n,m,m)$；$n$ 个对角块\\
+入 & \texttt{upper} & $(n-1,m,m)$；\texttt{upper[k]} 把块行 $k$ 耦合到块行 $k+1$\\
+入 & \texttt{rhs} & $(n,m)$；每个块行一个右端向量\\
+入 & \texttt{regularization} & 标量，默认 $0$；等价于解 $(\mat{A}+\sigma\mat{I})\bm{x}=\bm{b}$\\
+出 & \texttt{solution} & $(n,m)$；形状与 \texttt{rhs} 相同\\
+出 & \texttt{last\_solve} & 诊断：\akey{blocks}, \akey{block_size},
+  \akey{unknowns}, \akey{regularization}\\
+出 & \texttt{BlockTridiagonalError} & 形状不合法或块主元奇异时抛出，含行号\\
+\end{longtable}
+}
+
+\noindent
+契约上有两处设计决定值得点明。\textbf{（i）三条带分开传，不传一个稀疏矩阵对象。}
+这使接口不依赖任何稀疏矩阵库，调用方也不必为了用本模块而构造
+SciPy 对象 —— 正是这一条让"零第三方依赖"在部署环境中成立。
+\textbf{（ii）\texttt{rhs} 是矩阵而不是向量。} 它对应的是
+"每个块行一个右端"的自然组织方式，同时也让
+\crefeq{eq:block-forward} 的一次分解多右端技巧可以透到接口上。
+
+\subsection*{小结}
+
+本章的结论可以概括为三点。
+
+其一，\textbf{结构就是性能，而结构由上游决定。}
+块三对角之所以可用，是因为 \crefchap{ch:mesh} 给出了张量积网格、
+\crefchap{ch:transport_dd} 按横向优先排序未知量。求解器本身没有
+创造这个结构，它只是\emph{没有浪费}它。
+
+其二，\textbf{用 LAPACK 的块主元换来一个更弱的假设。}
+不假设 M-矩阵、不假设对角占优，代价是每步若干次
+$m\times m$ 的带主元分解 —— 对耦合 Newton 系统，
+这个交换是值得的，因为那些性质在通量依赖电位后很容易丢失。
+
+其三，\textbf{"不做什么"也是设计的一部分。}
+不加迭代回退、不加跨块选主元、不支持逐块正则化 ——
+每一条都写进了 \S\ref{sec:block-limits}，连同它的后果。
+一份只说能力的接口说明，会让使用者在第一次遇到
+它的边界时把它当成 bug。
+
+\cleardoublepage

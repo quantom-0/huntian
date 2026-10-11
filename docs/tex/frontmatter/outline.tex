@@ -1,0 +1,72 @@
+% =====================================================================
+%  outline.tex —— 文档结构总览
+%  这一章是本项目"模块化"主张在文档侧的自述：9 个插件 -> 9 章，一一对应。
+%  同时诚实标注当前成文进度。
+% =====================================================================
+
+\chapter*{文档结构总览}
+\addcontentsline{toc}{chapter}{文档结构总览}
+\markboth{文档结构总览}{文档结构总览}
+
+本文档与代码仓库的 \fpath{plugins/} 目录一一对应：\textbf{一个插件一个模块章}。
+模块章的编号、文件名与模块标识的对应关系是稳定的契约，后续版本只增不改。
+
+\vspace{0.5em}
+\small
+\begin{longtable}{@{}c l l l c@{}}
+\toprule
+\textbf{章} & \textbf{模块标识} & \textbf{版本} & \textbf{类别} & \textbf{状态}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{章} & \textbf{模块标识} & \textbf{版本} & \textbf{类别} & \textbf{状态}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\multicolumn{5}{@{}l@{}}{\itshape 第一部分\ \ 总论}\\
+1  & 引言与文档范围                       & ---     & ---        & 待写\\
+2  & 系统架构：模块即插件、服务即插件       & ---     & ---        & 待写\\
+3  & 数据流与 artifact 契约               & ---     & ---        & 待写\\
+4  & 验证方法学                           & ---     & ---        & 待写\\
+5  & 模块索引与依赖关系                    & ---     & ---        & 待写\\
+\midrule
+\multicolumn{5}{@{}l@{}}{\itshape 第二部分\ \ 网格与材料}\\
+6  & \pid{mesh.structured2d}             & 0.1.0   & mesh       & \textbf{已成文}\\
+7  & \pid{materials.dft}                 & 0.1.0   & physics    & \textbf{已成文}\\
+\midrule
+\multicolumn{5}{@{}l@{}}{\itshape 第三部分\ \ 极化与量子}\\
+8  & \pid{physics.polarization.ambacher} & 0.1.0   & physics    & \textbf{已成文}\\
+9  & \pid{physics.quantum.analytic_tw}  & 0.1.0   & physics    & \textbf{已成文}\\
+10 & \pid{physics.quantum.sp1d}          & 1.1.1   & physics    & \textbf{已成文}\\
+\midrule
+\multicolumn{5}{@{}l@{}}{\itshape 第四部分\ \ 输运与提取}\\
+11 & \pid{transport.dd}                  & 0.1.0   & transport  & \textbf{已成文}\\
+12 & \pid{extract.fom}                   & 0.1.0   & extract    & \textbf{已成文}\\
+\midrule
+\multicolumn{5}{@{}l@{}}{\itshape 第五部分\ \ 数值服务模块}\\
+13 & \pid{nonlinear.newton}              & 1.0.0   & solver     & \textbf{已成文}\\
+14 & \pid{linear.blocktridiag}           & 0.1.0   & solver     & \textbf{已成文}\\
+\midrule
+\multicolumn{5}{@{}l@{}}{\itshape 附录}\\
+A  & 闭式解基准汇总                       & ---     & ---        & 待写\\
+B  & 可标定参数总表                       & ---     & ---        & 待写\\
+C  & 版本、指纹与 artifact 契约矩阵        & ---     & ---        & 待写\\
+D  & 已知边界与欠账清单                    & ---     & ---        & 待写\\
+\midrule
+\multicolumn{5}{@{}l@{}}{\itshape 全局部件}\\
+--- & 参考文献                            & ---    & ---        & 成文\\
+--- & 索引                                & ---    & ---        & 成文\\
+
+\end{longtable}
+\normalsize
+
+\vspace{0.5em}
+\noindent
+\textbf{关于本阶段的编号。}第五部分之前的章节尚未成文，但\emph{章号已经锁定}：
+本文档当前版本只印出第 10 章，其章号即为 10 而非 1。这样做的目的是让章号成为
+稳定契约 —— 后补的第 6--9 章不会使第 10 章的交叉引用失效。待 P1--P3 铺开后，
+目录自会填满，而 \crefchap{ch:sp1d} 的编号不会再变。
+
+\cleardoublepage

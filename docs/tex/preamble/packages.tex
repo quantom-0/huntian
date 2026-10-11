@@ -1,0 +1,99 @@
+% =====================================================================
+%  packages.tex —— 宏包加载与引擎设定
+%  引擎：XeLaTeX（中文经 ctex，字体走 Windows 字体集）
+%  加载顺序有讲究：biblatex -> hyperref -> cleveref -> imakeidx
+%  请勿在此文件写正文，也不要写版式参数（那些属于 style.tex）
+% =====================================================================
+
+% ---- 页面几何 --------------------------------------------------------
+\usepackage[
+  top=25mm, bottom=25mm,
+  left=28mm, right=25mm,
+  headsep=6mm, footskip=10mm
+]{geometry}
+
+% ---- 数学 ------------------------------------------------------------
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{bm}
+
+% ---- 表格与浮动体 ----------------------------------------------------
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{caption}
+
+% ---- 列表 ------------------------------------------------------------
+\usepackage{enumitem}
+
+% ---- 可断行的等宽标识符 ----------------------------------------------
+%  xurl 让 \path 可以在任意标点处断行。本文档的 \pid（模块标识，
+%  形如 physics.quantum.analytic_tw）用它来避免窄表格列里的溢出盒。
+%  ⚠ 只给 \pid 用：\path 是 verbatim 扫描，会\emph{吞掉空格}，
+%  因此含空格的 \akey/\fpath 继续用 \detokenize（见 style.tex）。
+\usepackage{xurl}
+
+% ---- 颜色与图形 ------------------------------------------------------
+\usepackage{xcolor}
+\usepackage{graphicx}
+
+%  调色板必须在 hyperref 之前定义：hyperref 的 colorlinks 会直接引用这些名字。
+\definecolor{NemoLink}{HTML}{1F4E79}   % 深蓝：内部链接
+\definecolor{NemoCite}{HTML}{7A3E00}   % 赭石：文献引用
+\definecolor{NemoUrl}{HTML}{0B6E4F}    % 深绿：外部链接
+\definecolor{NemoRule}{HTML}{4A4A4A}   % 灰：表格线
+\definecolor{NemoCardBg}{HTML}{F2F5F8} % 浅蓝灰：模块卡片底纹
+\definecolor{NemoKeyBg}{HTML}{EDEDED}  % 浅灰：代码/键名底纹
+\definecolor{NemoWarn}{HTML}{9C2A00}   % 暗红：边界与风险提示
+
+% ---- 单位 ------------------------------------------------------------
+\usepackage{siunitx}
+\sisetup{
+  detect-all,
+  per-mode = symbol,
+  range-phrase = {\text{--}},
+  range-units = single,
+  separate-uncertainty = true
+}
+
+% ---- 参考文献（全局唯一一份，样式为国标 GB/T 7714-2015）--------------
+\usepackage[backend=biber,style=gb7714-2015,sorting=gb7714-2015]{biblatex}
+\addbibresource{refs.bib}
+
+% ---- 超链接 ----------------------------------------------------------
+\usepackage[
+  unicode=true,
+  bookmarksnumbered=true,
+  bookmarksopen=true,
+  colorlinks=true,
+  linkcolor=NemoLink,
+  citecolor=NemoCite,
+  urlcolor=NemoUrl,
+  filecolor=NemoUrl,
+  pdftitle={Huntian: GaN 射频 HEMT 轻量化 TCAD 内核},
+  pdfsubject={模块化技术文档},
+  pdfkeywords={GaN, HEMT, TCAD, Schroedinger-Poisson, drift-diffusion}
+]{hyperref}
+
+% ---- 智能交叉引用 ----------------------------------------------------
+%  注意：这里\emph{不}加载 cleveref —— 它与 ctex 不兼容，第二遍编译会报
+%  "Extra \endcsname"（最小复现已确认，且与 hyperref 无关）。
+%  本文档改用自己的引用宏，见 preamble/refs.tex。
+
+% ---- 索引 ------------------------------------------------------------
+%  P0 用 texindy（UTF-8 + 英文排序规则）；中文条目一律带 ASCII 排序键
+%  （写成 \index{3method@方法!...}），因此排序完全由文档控制，
+%  与 makeindex / xindy 的选择无关。详见 §"索引与术语约定"。
+\usepackage{imakeidx}
+\makeindex[
+  title={索引},
+  intoc=true,
+  program=texindy,
+  options={-C utf8 -L english},
+  columns=2,
+  columnsep=1.2em
+]

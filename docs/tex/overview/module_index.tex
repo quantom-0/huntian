@@ -1,0 +1,231 @@
+% 总论第 5 章 —— 模块索引与依赖关系
+
+\chapter{模块索引与依赖关系}
+\label{ch:module-index}
+
+本章是全文的索引页：把九个模块的契约、依赖、能力与版本集中在一处，
+使读者不必翻遍九章才能拼出整体结构。
+
+\section{九个模块一览}
+\label{sec:index-overview}
+
+\creftab{tab:index-modules} 是本文档当前版本的完整模块清单。
+它与代码中的 \texttt{MANIFEST} 逐字段一致；任何一行变化
+都意味着某个模块章需要同步更新。
+
+{\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}p{0.05\textwidth} p{0.245\textwidth} p{0.075\textwidth}
+                    p{0.165\textwidth} p{0.165\textwidth} p{0.135\textwidth}@{}}
+\caption{九个模块的完整清单（与代码 MANIFEST 逐字段一致）}\label{tab:index-modules}\\
+\toprule
+\textbf{章} & \textbf{模块标识} & \textbf{版本} &
+\textbf{依赖 artifact} & \textbf{产出 artifact} & \textbf{验证状态}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{章} & \textbf{模块标识} & \textbf{版本} &
+\textbf{依赖 artifact} & \textbf{产出 artifact} & \textbf{验证状态}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+6 & \pid{mesh.structured2d} & 0.1.0 &
+  \akey{structure} & \akey{mesh} & partially\\
+7 & \pid{materials.dft} & 0.1.0 &
+  \akey{structure} & \akey{materials}, \akey{dft_provenance} & partially\\
+8 & \pid{physics.polarization.ambacher} & 0.1.0 &
+  \akey{structure}, \akey{materials} & \akey{polarization} & partially\\
+9 & \pid{physics.quantum.analytic_tw} & 0.1.0 &
+  \akey{polarization} & \akey{quantum}, \akey{ns} & partially\\
+10 & \pid{physics.quantum.sp1d} & \textbf{1.1.1} &
+  \akey{polarization}, \akey{materials} & \akey{quantum}, \akey{ns} & partially\\
+11 & \pid{transport.dd} & 0.1.0 &
+  \akey{mesh}, \akey{structure}, \akey{materials}, \akey{polarization} &
+  \akey{electrostatics}, \akey{carriers}, \akey{current}, \akey{iv} & partially\\
+12 & \pid{extract.fom} & 0.1.0 &
+  \akey{ns}, \akey{quantum}, \akey{polarization} & \akey{results.fom} &
+  \textbf{unverified}\\
+13 & \pid{nonlinear.newton} & 1.0.0 &
+  （无） & （无） & partially\\
+14 & \pid{linear.blocktridiag} & 0.1.0 &
+  （无） & （无） & partially\\
+\end{longtable}
+}
+
+\noindent
+表中 "partially" 为 \texttt{partially-verified} 的缩写。
+九个模块中只有 \pid{extract.fom} 是 \texttt{unverified}，
+且是\emph{按设计如此}：它本身就是一个模型的闭式解，
+没有闭式解可以对，只能等 L2 基准（见 \crefchap{ch:fom}）。
+
+\section{依赖图}
+\label{sec:index-dag}
+
+依赖关系是一个有向无环图，其分层结构见 \creftab{tab:index-dag}。
+分层的依据是 \texttt{requires}/\texttt{produces}：
+第 $\ell$ 层的模块只消费第 $<\ell$ 层的产出。
+
+\begin{veriftable}{依赖图的分层结构}{tab:index-dag}
+\vgroup{第 0 层\ \ 外部种入（由 Deck 提供，不由任何模块产出）}
+\vrow{}{}{\akey{structure}, \akey{materials}（内置库）, \akey{gate}, \akey{temperature_K}}
+\vgroup{第 1 层\ \ 几何与材料}
+\vrow{\crefchap{ch:mesh}}{\akey{structure}}{$\to$ \akey{mesh}}
+\vrow{\crefchap{ch:dft}}{\akey{structure}}{$\to$ \akey{materials}, \akey{dft_provenance}}
+\vgroup{第 2 层\ \ 极化}
+\vrow{\crefchap{ch:polarization}}{\akey{structure}, \akey{materials}}{$\to$ \akey{polarization}}
+\vgroup{第 3 层\ \ 量子（二选一）}
+\vrow{\crefchap{ch:analytic_tw}}{\akey{polarization}}{$\to$ \akey{quantum}, \akey{ns}}
+\vrow{\crefchap{ch:sp1d}}{\akey{polarization}, \akey{materials}}{$\to$ \akey{quantum}, \akey{ns}}
+\vgroup{第 4 层\ \ 输运}
+\vrow{\crefchap{ch:transport_dd}}{\akey{mesh}, \akey{structure}, \akey{materials},
+  \akey{polarization}（+\akey{quantum} 可选）}{
+  $\to$ \akey{electrostatics}, \akey{carriers}, \akey{current}, \akey{iv}, \akey{ns}}
+\vgroup{第 5 层\ \ 提取}
+\vrow{\crefchap{ch:fom}}{\akey{ns}, \akey{quantum}, \akey{polarization}}{$\to$ \akey{results.fom}}
+\vnote{第 3 层的两个模块\emph{互斥}：它们声明同一能力 \texttt{quantum}、
+      产出同一组键，Deck 的 \akey{quantum} 槽只能绑其中一个。
+      第 4 层对 \akey{quantum} 的依赖是\emph{可选}的
+      （\akey{quantum_warm_start="auto"} 时存在即用，不存在则退回
+      Poisson 热启动），因此输运层不因量子槽空着而无法运行。}
+\end{veriftable}
+
+\subsection{扇出与扇入}
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.28em,topsep=0.35em]
+  \item \textbf{扇出最广的键是 \akey{polarization}}（四个消费者）。
+        它的契约稳定性最重要 —— 改它的键名会同时影响四章。
+  \item \textbf{扇入最多的是 \pid{transport.dd}}（四个必需依赖加一个可选）。
+        它是全流水线中装配最复杂的一步，也是唯一一个需要\emph{协作者}
+        （\crefchap{ch:blocktridiag}）的物理模块。
+  \item \textbf{两个服务模块与主图无关}：它们没有依赖也没有产出，
+        只被调用。因此它们在 \creftab{tab:index-dag} 中不占任何一层。
+\end{itemize}
+
+\section{服务槽与能力矩阵}
+\label{sec:index-slots}
+
+\subsection{能力标签}
+
+Deck 的槽位绑定由\emph{能力}校验，而不是由模块名硬编码。
+\creftab{tab:index-capabilities} 列出全部能力标签及其声明者。
+
+{\small
+\begin{longtable}{@{}p{0.20\textwidth} p{0.34\textwidth} p{0.36\textwidth}@{}}
+\caption{Deck 槽位、要求能力与声明该能力的模块}\label{tab:index-capabilities}\\
+\toprule
+\textbf{槽位} & \textbf{要求能力} & \textbf{声明该能力的模块}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{槽位} & \textbf{要求能力} & \textbf{声明该能力的模块}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\akey{mesh} & \texttt{mesh} & \pid{mesh.structured2d}\\
+\akey{materials} & \texttt{materials} & \pid{materials.dft}（另声明 \texttt{materials.dft}、\texttt{materials.validation}）\\
+\akey{polarization} & \texttt{polarization} & \pid{physics.polarization.ambacher}\\
+\akey{quantum} & \texttt{quantum} & \pid{physics.quantum.analytic_tw}、
+  \pid{physics.quantum.sp1d}\\
+\akey{transport} & \texttt{transport} & \pid{transport.dd}（另声明 \texttt{transport.dd}、
+  \texttt{current}、\texttt{iv}）\\
+\akey{mobility} & \texttt{mobility} & \textbf{无}（预留槽）\\
+\akey{traps} & \texttt{traps} & \textbf{无}（预留槽）\\
+\akey{thermal} & \texttt{thermal} & \textbf{无}（预留槽）\\
+\midrule
+\akey{nonlinear}\ \ (服务) & \texttt{nonlinear} & \pid{nonlinear.newton}\\
+\akey{linear}\ \ (服务) & \texttt{linear} & \pid{linear.blocktridiag}\\
+\akey{backend}\ \ (服务) & \texttt{backend} & \textbf{无}（预留槽）\\
+\end{longtable}
+}
+
+\noindent
+三个预留槽（\akey{mobility}、\akey{traps}、\akey{thermal}）的存在
+说明了架构的意图：它们对应方案中尚未实现的物理
+（场依赖迁移率的独立插件、陷阱、自热），而 Deck 的槽位表已经为它们留好了位置。
+\crefchap{ch:transport_dd} 目前把迁移率作为\emph{自身参数}而非独立模块，
+并明确记录了这一临时状态。
+
+\subsection{提取器链}
+
+\akey{extractors} 是一个\emph{列表}槽而不是单槽，因此可以串联多个提取器。
+当前只有 \pid{extract.fom} 一个实现。流水线为它们分配的槽名形如
+\texttt{extract:0}、\texttt{extract:1}，这一点在
+\crefchap{ch:fom} 的验收中可见。
+
+\section{版本与指纹}
+\label{sec:index-versions}
+
+\begin{veriftable}{当前解析到的模块版本}{tab:index-versions}
+\vrow{九个模块的版本}{见 \creftab{tab:index-modules}}{
+  最高版本为 \pid{physics.quantum.sp1d} 的 1.1.1}
+\vrow{多版本共存}{同一标识可注册多个版本}{
+  已验证：\pid{physics.quantum.sp1d} 的 1.1.1 与 2.0.0 并存，
+  旧实例继续用旧版本}
+\vrow{版本钉住语义}{\texttt{\^{}1.0.0} 允许 $1.x$ 升级}{
+  因此它\emph{不}保证数值不变；那必须靠主版本号表达}
+\vrow{指纹语义}{参数 + 模块版本 + 材料库 + 标记}{
+  \textbf{artifact 数值不进指纹}，见 \crefchap{ch:architecture}}
+\vnote{本文档记录的一次真实指纹变化：\pid{physics.quantum.sp1d} 的
+      Jacobian 精确化使 self-consistent 指纹从 \texttt{c26cb881f33c000c}
+      变为 \texttt{9d716641ad967853}，原因是模块版本从 1.1.0 升到 1.1.1；
+      解析模型未受影响，指纹不变。}
+\end{veriftable}
+
+\section{章、插件与测试对照}
+\label{sec:index-crossref}
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.055\textwidth} p{0.30\textwidth} p{0.30\textwidth} p{0.24\textwidth}@{}}
+\toprule
+\textbf{章} & \textbf{插件目录} & \textbf{测试文件} & \textbf{设计稿}\\
+\midrule
+6 & \fpath{plugins/mesh_structured2d/} & \fpath{tests/test_plugins.py} & 方案 §5.1\\
+7 & \fpath{plugins/materials_dft/} & \fpath{tests/test_materials_dft*.py} &
+  DFT 设计稿\\
+8 & \fpath{plugins/polarization_ambacher/} & \fpath{tests/test_plugins.py} & 方案 §5.1\\
+9 & \fpath{plugins/quantum_analytic_tw/} & \fpath{tests/test_plugins.py} & 方案 §5.1\\
+10 & \fpath{plugins/quantum_sp1d/} & \fpath{tests/test_quantum_sp1d.py} & 方案 §5.2\\
+11 & \fpath{plugins/transport_dd/} & \fpath{tests/test_transport_dd.py} &
+  DD 设计稿\\
+12 & \fpath{plugins/extract_fom/} & \fpath{tests/test_plugins.py} & 方案 §5.4\\
+13 & \fpath{plugins/nonlinear_newton/} & \fpath{tests/test_nonlinear_newton.py} & 方案 §6\\
+14 & \fpath{plugins/linear_blocktridiag/} & \fpath{tests/test_linear_blocktridiag.py} &
+  DD 设计稿 §9\\
+\midrule
+— & — & \fpath{tests/test_hotswap_*.py} & 即插即用验收\\
+— & — & \fpath{tests/test_services.py}、\fpath{test_pipeline.py}、
+  \fpath{test_registry.py}、\fpath{test_deck.py}、\fpath{test_context.py} &
+  骨架层验收\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+最后一组文件不属于任何单个模块章，它们验收的是\crefchap{ch:architecture}
+与 \crefchap{ch:dataflow} 所描述的骨架本身：服务槽的装配、
+流水线顺序的推导、注册中心的版本与依赖语义、Deck 的两级校验、
+上下文的溯源与指纹。本文档当前版本对应的测试规模为
+\textbf{426 个用例，全部通过}。
+
+\section{阅读本文档之外的入口}
+
+本文档是\emph{原理与证据}的汇总，不是使用手册。与本仓库的其他材料的分工是：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.28\textwidth} p{0.62\textwidth}@{}}
+\toprule
+\textbf{材料} & \textbf{回答的问题}\\
+\midrule
+本文档 & 每个模块\emph{在算什么}、\emph{凭什么信}、\emph{边界在哪}\\
+\fpath{README.md} & 怎么跑、跑出什么样、当前进度\\
+\fpath{工作日志.md} & 每一步\emph{为什么}这么做、踩过什么坑、欠什么账\\
+三份设计稿 & 实现\emph{之前}的意图，以及实现后的偏差记录\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\cleardoublepage

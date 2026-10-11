@@ -1,0 +1,397 @@
+% module_id: nonlinear.newton
+% module_version: 1.0.0
+% plugin_dir: plugins/nonlinear_newton
+% source_files: plugins/nonlinear_newton/{__init__,solver}.py
+% tests: tests/test_nonlinear_newton.py
+%
+% 服务模块变体：§x.1 记 capabilities 与调用契约（无 requires/produces），
+% §x.2 换为「问题类定义」。其余槽位与非服务模块一致。
+
+\chapter{通用阻尼 Newton 求解器}
+\label{ch:newton}
+
+\begin{quote}
+\small
+\noindent\textbf{模块标识}\quad\pid{nonlinear.newton}\qquad
+\textbf{版本}\quad 1.0.0\qquad
+\textbf{类别}\quad solver
+\end{quote}
+
+\noindent
+本章记述一个\emph{不包含任何物理}的模块：一个通用的稠密
+Newton--Raphson 迭代器，连同回溯线搜索与对角正则化。
+它的存在本身就是架构主张的一部分 —— \textbf{迭代策略是策略，不是物理}，
+因此它不该被写死在任何一个物理模块里，而应当作为一个可替换的协作者
+被按需解析出来。
+
+\section{模块契约}
+\label{sec:newton-contract}
+\index{4module@模块!nonlinear.newton}
+
+\begin{modulecard}{nonlinear.newton}{1.0.0}
+  \cardrow{类别}{solver（数值服务，\textbf{不是}流水线阶段）}
+  \cardrow{能力}{nonlinear, nonlinear.newton}
+  \cardrow{依赖 artifact}{\textbf{无}（服务模块不读上下文数据）}
+  \cardrow{产出 artifact}{\textbf{无}（服务模块不写上下文数据）}
+  \cardrow{验证状态}{partially-verified}
+  \cardrow{源码}{\fpath{plugins/nonlinear_newton/}}
+  \cardrow{测试}{\fpath{tests/test_nonlinear_newton.py}}
+  \cardrow{可标定参数}{\textbf{无}（求解器参数是数值选择，不是器件物理量）}
+  \cardsep
+  \cardrow{调用契约}{\texttt{solve(residual, jacobian, x0, options=) -> NewtonResult}；
+    \texttt{verify\_jacobian(residual, jacobian, x) -> JacobianCheck}}
+  \cardrow{解析方式}{经 Deck 的 \akey{nonlinear} 槽配置，由物理模块通过
+    \texttt{ctx.services} 按需取得}
+  \cardrow{已知消费者}{\pid{physics.quantum.sp1d}（\crefchap{ch:sp1d}）}
+\end{modulecard}
+
+\creftab{tab:newton-vs-service} 对比了服务模块与普通数据模块在契约上的差别。
+其中\textbf{产物为空}这一点最容易引起误解，值得明说：它不产生 artifact，
+但它\emph{确实}被 Deck 配置、确实参与一次运行、也确实影响结果 ——
+只不过它的影响是通过\emph{调用}而非通过\emph{数据通道}传递的。
+正因如此，把 \texttt{execute()} 当作流水线阶段调用会被显式拒绝，
+错误信息里写明"这是一个服务"。
+
+\begin{veriftable}{服务模块与数据模块的契约差别}{tab:newton-vs-service}
+\vrow{流水线阶段}{是}{否（\texttt{execute()} 抛错，信息含 "service"）}
+\vrow{读/写 artifact}{是}{否}
+\vrow{Deck 中的位置}{\akey{physics} / \akey{modules} 槽}{\akey{modules} 下的服务槽
+  （\akey{nonlinear} / \akey{linear} / \akey{backend}）}
+\vrow{取得方式}{由 Pipeline 按依赖顺序调度}{
+  由 \texttt{ServiceRegistry} 惰性实例化并按配置缓存}
+\vrow{参数校验}{同左}{同左（未知参数同样被拒绝）}
+\end{veriftable}
+
+\subsection{服务槽机制}
+
+\akey{nonlinear} 槽里的模块\textbf{不是}流水线阶段：它们不读 artifact、
+不写 artifact，而是在另一个模块\emph{内部}被调用。它们通过上下文上的
+\texttt{ServiceRegistry} 按需解析，参数由 Deck 配置：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.44\textwidth} p{0.46\textwidth}@{}}
+\toprule
+\textbf{机制} & \textbf{行为}\\
+\midrule
+配置 & \texttt{configure(module\_id, version, params)}，注册中心里不存在即报错\\
+实例化 & 惰性：首次 \texttt{get()} 时才建实例\\
+缓存 & 按 \texttt{(模块标识 $|$ 版本 $|$ 规范化参数)} 作键缓存\\
+覆盖 & 调用方传入的 \texttt{params} 覆盖 Deck 槽里的同名参数\\
+释放 & \texttt{release\_all()} 统一 \texttt{terminate()}，单个失败不阻断其余\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+缓存键里带\emph{规范化参数}是必要的：同一模块以两组不同参数被请求时，
+必须得到两个独立实例，否则后一次调用会静默继承前一次的配置。
+而"调用方覆盖"这一条，正是物理模块注入\emph{自己量纲}的容差的方式 ——
+例如 \pid{physics.quantum.sp1d} 传入的是以 \U{eV} 计的容差。
+
+\section{问题类定义}
+\label{sec:newton-problem}
+\index{1concept@概念!service slot@服务槽}
+
+本模块求解的是如下问题类：给定连续的 $\mat{R}:\mathbb{R}^{n}\to\mathbb{R}^{n}$
+及其导数 $\mat{J}=\partial\mat{R}/\partial\bm{x}$（稠密可算），求
+
+\begin{equation}
+\mat{R}(\bm{x}^{\star}) \;=\; \bm{0}.
+\label{eq:newton-problem}
+\end{equation}
+
+三个限定词划定了它的能力边界：\textbf{连续}（线搜索依赖残差可比大小）、
+\textbf{稠密}（线性步用稠密 LU，见 \S\ref{sec:newton-cost}）、
+\textbf{导数可得}（不做割线或拟 Newton）。
+
+\subsection{调用接口}
+
+残差与 Jacobian 以\emph{可调用对象}传入，模块对问题本身一无所知：
+
+\begin{equation}
+\mat{R},\ \text{aux} \;=\; \texttt{residual}(\bm{x}),
+\qquad
+\mat{J} \;=\; \texttt{jacobian}(\bm{x},\ \text{aux}).
+\label{eq:newton-callbacks}
+\end{equation}
+
+\crefeq{eq:newton-callbacks} 中的 \texttt{aux} 通道是接口设计上的一个刻意安排：
+残差求值通常包含一件昂贵的事（对 \crefchap{ch:sp1d} 的自洽 SP 系统而言，
+是薛定谔方程的本征分解），而 Jacobian 恰好需要\emph{同一个}中间状态。
+把 \texttt{aux} 从残差传给 Jacobian，使这次昂贵计算\emph{每步只做一次}。
+若没有这条通道，Jacobian 要么重算一遍，要么把状态藏在模块全局里 ——
+前者使代价翻倍，后者使模块不可重入。
+
+\section{算法}
+\label{sec:newton-algorithm}
+
+\subsection{Newton 步与阻尼}
+\label{sec:newton-step}
+
+核心迭代是标准的：
+
+\begin{equation}
+\mat{J}(\bm{x}_k)\,\bm{\delta}_k \;=\; -\mat{R}(\bm{x}_k),
+\qquad
+\bm{x}_{k+1} \;=\; \bm{x}_k + \lambda_k\,\bm{\delta}_k .
+\label{eq:newton-iteration}
+\end{equation}
+
+\subsection{回溯线搜索}
+\label{sec:newton-line-search}
+\index{3method@方法!line search@回溯线搜索}
+
+阻尼因子 $\lambda_k$ 不是固定值，而是由回溯搜索确定的：从 $\lambda=1$ 起，
+每次减半，直到满足 Armijo 型充分下降条件
+
+\begin{equation}
+\bigl\lVert\mat{R}(\bm{x}_k+\lambda\bm{\delta}_k)\bigr\rVert_\infty
+\;\le\;
+\bigl(1 - c\,\lambda\bigr)\,
+\bigl\lVert\mat{R}(\bm{x}_k)\bigr\rVert_\infty ,
+\qquad c = 10^{-4}\ (\akey{armijo}),
+\label{eq:newton-armijo}
+\end{equation}
+
+线搜索因此是\emph{单调性保证}：接受的每一步都不增大残差范数。
+阻尼序列被完整记录在 \texttt{damping\_history} 中，可供诊断 ——
+"每一步都是全额步"与"一直在折半"是两种完全不同的收敛故事。
+
+搜索有三个终止口：接受、$\lambda < \akey{min_damping}$（默认 $10^{-4}$）、
+或折半次数达到 \akey{max_backtracks}（默认 $12$）。
+连续 \akey{stall_limit}（默认 $3$）次搜索失败即中止，
+并在消息中明确指出\textbf{"Jacobian 可能与残差不一致"} ——
+这是线性搜索失败最常见的根因，把猜测写进错误信息比让人去猜要好。
+
+\subsection{收敛判据：更新范数，不是残差范数}
+\label{sec:newton-convergence}
+
+收敛由\emph{更新范数}判定：
+
+\begin{equation}
+\bigl\lVert\lambda_k\bm{\delta}_k\bigr\rVert_\infty \;\le\; \texttt{tolerance}
+\quad(\text{默认 } 10^{-8}).
+\label{eq:newton-convergence}
+\end{equation}
+
+为什么不用残差范数？因为对于\emph{行均衡}过的系统
+（\crefchap{ch:transport_dd} 与 \crefchap{ch:sp1d} 都是），
+残差里最弱的几行会因相消而停在一个地板上，
+此时\emph{任何}步都无法把残差范数再降低。若以残差范数判定，
+迭代会在地板上空转到上限；以更新范数判定则立刻认定"迭代已停止移动"，
+这是正确的语义。
+
+另有一个可选的 \akey{residual_tolerance}：设定后它成为\emph{额外的}
+接受条件（允许在残差已足够小时提前接受一个不满足 Armijo 的步），
+默认不设。
+
+\subsection{对角正则化（PTC）}
+\label{sec:newton-ptc}
+\index{3method@方法!pseudo-transient continuation@伪瞬态延拓}
+
+\akey{ptc_shift}（默认 $0$）给出一个常数对角位移：
+
+\begin{equation}
+\bigl(\mat{J}(\bm{x}_k) + \sigma\mat{I}\bigr)\bm{\delta}_k \;=\; -\mat{R}(\bm{x}_k).
+\label{eq:newton-ptc}
+\end{equation}
+
+它与 \crefchap{ch:transport_dd} 的伪瞬态延拓是同一个数学操作
+（那里的 $\sigma = V/\tau$），但这里的形式更弱：$\sigma$ 是
+\emph{固定的}，不做自适应调度。因此本模块提供的是"可用的兜底"，
+而不是 \crefchap{ch:transport_dd} 那套随成败增减 $\tau$ 的状态机。
+
+\subsection{Jacobian 校验器}
+\label{sec:newton-checker}
+
+本模块另提供一个诊断钩子：把解析 Jacobian 与中心差分比较。
+
+\begin{equation}
+\mat{J}^{\text{FD}}_{:,j} \;=\;
+\frac{\mat{R}(\bm{x}+h\bm{e}_j)-\mat{R}(\bm{x}-h\bm{e}_j)}{2h},
+\qquad
+h = 10^{-6}\max\!\bigl(1,\norm{\bm{x}}_\infty\bigr),
+\label{eq:newton-fd}
+\end{equation}
+
+\begin{equation}
+e_j \;=\;
+\frac{\bigl\lVert \mat{J}^{\text{FD}}_{:,j} - \mat{J}_{:,j}\bigr\rVert_\infty}
+{\max\bigl(\bigl\lVert \mat{J}^{\text{FD}}_{:,j}\bigr\rVert_\infty,\
+\bigl\lVert \mat{J}_{:,j}\bigr\rVert_\infty,\ 10^{-300}\bigr)},
+\qquad
+\text{判定}\ \max_j e_j < 10^{-4}.
+\label{eq:newton-checker}
+\end{equation}
+
+阈值 $10^{-4}$ 的选取有明确的理由：正确的 Jacobian 在步长适当时
+通常吻合到 $10^{-6}$ 至 $10^{-10}$，因此这个阈值\emph{能抓住符号错误
+与缺项，同时容忍差分公式本身的截断误差}。返回结构里带
+\akey{worst_column}，使"错在哪一列"可以直接读出。
+
+\crefeq{eq:newton-checker} 的分母取的是\textbf{逐列}的范数。
+这一点在 \crefchap{ch:transport_dd} 的语境下\emph{不够} —— 那里记录过
+一条教训：耦合 $(\psi,n)$ 系统里一个绝对值很小但完全错误的项，
+在列归一化下看起来只有 $10^{-10}$ 的相对误差，改成逐行相对判据后
+才立刻暴露。本模块的校验器对它自己的问题类（良缩放的稠密系统）
+是够用的，而\crefchap{ch:transport_dd} 因此另写了自己的判据。
+这条差异不是缺陷，但它是一个\textbf{必须被知道}的适用边界，
+见 \S\ref{sec:newton-limits}。
+
+\section{代价与复杂度}
+\label{sec:newton-cost}
+\index{1concept@概念!dense factorisation@稠密分解}
+
+每一步的主要代价是稠密 LU 分解，为 $O(n^{3})$ 时间与 $O(n^{2})$ 内存。
+此外每步至少一次残差求值（线搜索每次回溯再加一次）。
+
+这个代价决定了本模块的\emph{适用范围上界}。\crefchap{ch:transport_dd}
+的演示网格有 $2n_xn_z = 132\,922$ 个未知量 —— 稠密分解需要约
+$1.4\times10^{10}$ 个浮点字的存储，完全不可行。因此
+\crefchap{ch:transport_dd} \textbf{不走}这个服务，而是经 Deck 的
+\akey{linear} 槽解析 \pid{linear.blocktridiag}（\crefchap{ch:blocktridiag}），
+用自己的 Newton 循环加块三对角线性步。
+
+把 \pid{nonlinear.newton} 也迁到 \akey{linear} 槽上（即让它
+\emph{不}自己稠密分解，而是把线性步也交给服务）仍是欠账。
+它不影响任何已实现的功能，但它意味着：换一个新的线性代数后端，
+需要改两处而不是一处。
+
+\section{验证与基准}
+\label{sec:newton-verification}
+
+验证策略是"用有闭式解或已知收敛行为的问题把算法逼到各个分支上"。
+所有基准在 \fpath{tests/test_nonlinear_newton.py} 中固化。
+
+\begin{veriftable}{Newton 迭代的收敛性与分支覆盖}{tab:newton-verify}
+\vgroup{收敛性}
+\vrow{线性系统}{$\le2$ 步收敛}{通过，解精确到 $10^{-10}$}
+\vrow{标量根 $x^{2}-2$}{局部阶 $>1.7$}{通过（收敛到 $\sqrt2$，精确到 $10^{-12}$）}
+\vrow{耦合自洽 SP 系统（\crefchap{ch:sp1d} 实测）}{二阶}{局部阶 $1.99$，
+  末位残差 $1.3\times10^{-16}$}
+\vgroup{线搜索}
+\vrow{远起点恢复（$x^{3}-1$，自 $x=0.1$）}{收敛}{通过（精确到 $10^{-9}$，
+  且阻尼历史中确实出现 $<1$ 的因子）}
+\vrow{残差单调性}{逐点不增}{通过（含 $10^{-12}$ 的数值余量）}
+\vrow{良好起点无需回溯}{全部阻尼因子 $=1$}{通过}
+\vrow{\textbf{关闭线搜索后远起点失败}}{不收敛}{
+  通过（$x=40$、上限 $4$ 步 —— 用反例证明线搜索的必要性）}
+\vgroup{边界与诊断}
+\vrow{迭代上限被报告}{消息含 "iteration limit"}{通过}
+\vrow{奇异 Jacobian 被报告而非抛出}{不收敛 + 消息含 "linear solve failed"}{通过}
+\vrow{非方阵 Jacobian 被拒绝}{抛 \texttt{ValueError}}{通过}
+\vrow{PTC 位移改变步长}{步长不同}{通过}
+\vrow{结果可序列化}{含四个关键字段}{通过}
+\vrow{未知选项被拒绝}{抛 \texttt{TypeError}}{通过}
+\vgroup{Jacobian 校验器}
+\vrow{正确 Jacobian}{$<10^{-8}$}{通过}
+\vrow{错一个元素（$4.0$ 应为 $3.0$）}{被检出}{
+  $>10^{-2}$、\akey{ok=False}、\akey{worst_column} $=1$}
+\vrow{列子集被尊重}{\akey{per_column} 长度等于选择数}{通过}
+\vgroup{模块契约}
+\vrow{声明 \akey{nonlinear} 能力；\akey{produces} 为空}{是}{通过}
+\vrow{未知参数被拒绝}{抛 \texttt{ModuleConfigError}}{通过}
+\vrow{调用方选项覆盖模块配置}{覆盖生效}{通过}
+\vrow{作为流水线阶段运行被拒绝}{抛 \texttt{RuntimeError} 且含 "service"}{通过}
+\end{veriftable}
+
+\noindent
+\textbf{"关闭线搜索后远起点失败"这一条是刻意的反例基准。}
+它记录的不是实现的能力，而是\emph{另一个配置下的失败}，
+从而证明线搜索不是装饰。这类"负向基准"在本文档中不多见，
+但只要某个机制的价值只能通过对比才能说明，就应当有它。
+
+\section{误差来源与适用边界}
+\label{sec:newton-limits}
+\index{1concept@概念!validity limits@适用边界}
+
+\limitsheading
+
+\begin{bounds}
+  \item \textbf{线性步是稠密的。} $O(n^{3})$ 时间与 $O(n^{2})$ 内存
+        把适用范围限制在数千个未知量以内。\crefchap{ch:transport_dd}
+        的 $1.3\times10^{5}$ 个未知量它装不下，因此 DD 走
+        \crefchap{ch:blocktridiag} 的线性服务而不是这里。
+
+  \item \textbf{Jacobian 校验器用逐列归一化。} 见 \S\ref{sec:newton-checker}。
+        对耦合系统（\crefchap{ch:transport_dd}）这个判据已被证明不够，
+        那里另写了逐行相对判据。使用本校验器时应当知道这一区别。
+
+  \item \textbf{不做拟 Newton 或割线法。} Jacobian 必须由调用方提供，
+        且必须是精确的（或至少足够接近）。若调用方只有残差，
+        本模块无能为力。
+
+  \item \textbf{PTC 是静态的。} \akey{ptc_shift} 是常数，
+        不随迭代成败自适应。真正需要延拓策略的问题应当像
+        \crefchap{ch:transport_dd} 那样自建状态机。
+
+  \item \textbf{没有信赖域。} 线搜索保证单调下降，但不保证全局收敛：
+        残差曲面若有多个盆地，从坏初值出发可能收敛到另一个根，
+        或在线搜索中停滞。此时唯一的补救是更好的初值。
+
+  \item \textbf{收敛判据依赖问题自身的缩放。} 更新范数
+        $\norm{\lambda\bm{\delta}}_\infty$ 的量纲是\emph{未知量}的量纲。
+        因此容差必须由调用方按自己的量纲给出
+        （\crefchap{ch:sp1d} 传的是以 \U{eV} 计的容差）。
+        默认值 $10^{-8}$ 只是一个中性起点，不是通用推荐值。
+
+  \item \textbf{无并行、无 GPU。} 全部为 NumPy 稠密运算，
+        且每步的分解是串行的。
+\end{bounds}
+
+\section{接口契约与小结}
+\label{sec:newton-interface}
+
+\subsection{调用契约}
+
+{\small
+\begin{longtable}{@{}p{0.20\textwidth} p{0.24\textwidth} p{0.48\textwidth}@{}}
+\toprule
+\textbf{方向} & \textbf{名字} & \textbf{形状与语义}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{方向} & \textbf{名字} & \textbf{形状与语义}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+入 & \texttt{residual} & \texttt{x -> (R, aux)}；\texttt{R} 与 \texttt{x} 同形（一维），
+  \texttt{aux} 为不透明对象\\
+入 & \texttt{jacobian} & \texttt{(x, aux) -> (n, n)} 稠密数组；形状错误即抛 \texttt{ValueError}\\
+入 & \texttt{x0} & 一维初值\\
+入 & \texttt{options} & \texttt{NewtonOptions} 或映射；未知键即抛 \texttt{TypeError}\\
+出 & \texttt{NewtonResult} & \texttt{x}, \texttt{converged}, \texttt{iterations},
+  \texttt{residual\_norm}, \texttt{residual\_history}, \texttt{damping\_history},
+  \texttt{linear\_solves}, \texttt{message}\\
+出 & \texttt{JacobianCheck} & \texttt{max\_relative\_error}, \texttt{worst\_column},
+  \texttt{per\_column}, \texttt{step}, \texttt{ok}\\
+\end{longtable}
+}
+
+\noindent
+\texttt{NewtonResult} 里的两个历史列表（残差与阻尼）不是调试残留，
+而是\textbf{可验证性的前提}：\crefchap{ch:sp1d} 的收敛阶断言
+（局部阶 $1.99$）正是从 \texttt{residual\_history} 上算出来的。
+一个只返回"收敛了/没收敛"的求解器，会让调用方\emph{无法}
+在测试中证明它收敛得对。
+
+\subsection*{小结}
+
+本章的结论可以概括为三点。
+
+其一，\textbf{把迭代策略做成服务，换策略与换物理是同一种操作。}
+一个未来的 Krylov 或信赖域求解器只要声明 \akey{nonlinear} 能力、
+暴露同样的 \texttt{solve()}，就能顶上，物理模块一行不用改。
+
+其二，\textbf{收敛判据的语义比它的数值更重要。}
+用\emph{更新范数}而不是残差范数判定收敛，是对"行均衡系统的残差
+存在相消地板"这一事实的正确回应；用错了不会报错，
+只会让迭代在地板上空转到上限。
+
+其三，\textbf{诊断信息是可验证性的一部分。}
+残差历史、阻尼历史、\akey{worst_column} 三者合起来，
+使"这个 Jacobian 对不对""这次收敛是二次的吗"成为\emph{可断言}的问题，
+而不是靠输出一堆数字让人目测。
+
+\cleardoublepage

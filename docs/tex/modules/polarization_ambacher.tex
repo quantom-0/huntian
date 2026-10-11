@@ -1,0 +1,379 @@
+% module_id: physics.polarization.ambacher
+% module_version: 0.1.0
+% plugin_dir: plugins/polarization_ambacher
+% source_files: plugins/polarization_ambacher/__init__.py
+% tests: tests/test_plugins.py, tests/test_materials_dft_benchmarks.py (D2)
+
+\chapter{Ambacher 极化模型}
+\label{ch:polarization}
+
+\begin{quote}
+\small
+\noindent\textbf{模块标识}\quad\pid{physics.polarization.ambacher}\qquad
+\textbf{版本}\quad 0.1.0\qquad
+\textbf{类别}\quad physics
+\end{quote}
+
+\noindent
+本章记述二维电子气的\emph{来源}。在 AlGaN/GaN 异质结构中，导电沟道不是靠
+调制掺杂做出来的，而是靠\emph{极化}做出来的：自发极化与压电极化在异质界面
+上的不连续，等效为一层束缚面电荷，正是这层面电荷把导带拉出一个势阱。
+因此本模块是整条物理链的起点 —— \crefchap{ch:analytic_tw} 与
+\crefchap{ch:sp1d} 的量子求解器消费的"面密度上界"，就是这里算出的
+$\sigeff/q$。
+
+\section{模块契约}
+\label{sec:pol-contract}
+\index{4module@模块!physics.polarization.ambacher}
+
+\begin{modulecard}{physics.polarization.ambacher}{0.1.0}
+  \cardrow{类别}{physics（物理模型，流水线阶段）}
+  \cardrow{能力}{polarization, polarization.ambacher}
+  \cardrow{依赖 artifact}{structure, materials}
+  \cardrow{产出 artifact}{polarization}
+  \cardrow{验证状态}{partially-verified}
+  \cardrow{源码}{\fpath{plugins/polarization_ambacher/}}
+  \cardrow{测试}{\fpath{tests/test_plugins.py}（解析值、趋势、屏蔽比例）}
+  \cardsep
+  \cardrow{可标定参数}{\akey{screening}\calib、\akey{relaxed_fraction}\calib}
+  \cardrow{极性}{仅支持 Ga 面（\akey{polarity="ga_face"}），N 面显式拒绝}
+\end{modulecard}
+
+本模块有两个可标定量，其中 \akey{screening} 是整条极化链上
+\textbf{最大的不确定度来源}（见 \S\ref{sec:pol-screening}）。
+它的默认值未经论证，模块自己的文档也直言："没有公认取值，
+必须用 Hall 数据标定"。
+
+\section{极化物理与控制方程}
+\label{sec:pol-physics}
+
+\subsection{几何与极性约定}
+\label{sec:pol-geometry}
+\index{1concept@概念!Ga-face polarity@Ga 面极性}
+
+纤锌矿 III--氮化物沿 $c$ 轴（$[0001]$）缺少反演对称，因此即使无应变也存在
+\emph{自发极化}。Ga 面生长（Ga 原子在最外层的 (0001) 面）意味着
+$c$ 轴自衬底指向表面，此时的极化方向与面电荷符号是确定的 —— 本模块
+只实现这一极性，并在校验阶段对其他取值返回 \akey{unsupported} issue。
+
+沿 $z$ 轴（自表面指向体内）的坐标约定与 \crefchap{ch:sp1d} 一致。
+界面上的束缚面电荷密度由两侧极化强度的\emph{不连续}给出，
+其符号约定决定了势阱的朝向；若符号取反，导带会被抬高而不是压低，
+二维电子气随之消失。
+
+\subsection{双轴应变}
+\label{sec:pol-strain}
+\index{1concept@概念!biaxial strain@双轴应变}
+
+势垒层（Al$_x$Ga$_{1-x}$N）在沟道层（GaN）上赝晶生长时，面内晶格常数被
+强制与沟道一致，产生\emph{双轴}应变。由于 $a(\text{AlGaN}) < a(\text{GaN})$，
+势垒处于面内\emph{张}应变：
+
+\begin{equation}
+\varepsilon \;=\; f_{\text{relax}}\;
+\frac{a_{\text{ch}} - a_{\text{bar}}}{a_{\text{bar}}} ,
+\label{eq:strain}
+\end{equation}
+
+$a_{\text{bar}}$ 与 $a_{\text{ch}}$ 为两侧的面内晶格常数
+（由 \crefeq{eq:vegard} 对合金插值得到），
+$f_{\text{relax}}\in[0,1]$ 为\emph{弛豫度}（参数 \akey{relaxed_fraction}）：
+$f_{\text{relax}}=1$ 表示完全赝晶（应变全部保留），
+$0$ 表示完全弛豫（无应变）。以分母取势垒侧的 $a_{\text{bar}}$ 而非沟道侧，
+是因为应变定义在\emph{被应变的那一层}上。
+
+\subsection{压电极化}
+\label{sec:pol-piezo}
+\index{1concept@概念!piezoelectric polarization@压电极化}
+
+沿 $c$ 轴的双轴应变诱发的压电极化为
+
+\begin{equation}
+\boxed{\;
+P_{\text{pz}} \;=\; 2\,\varepsilon\,
+\left(e_{31} \;-\; e_{33}\,\frac{C_{13}}{C_{33}}\right)
+\;}
+\label{eq:piezo}
+\end{equation}
+
+所有材料常数取\emph{势垒层}的合金值。\crefeq{eq:piezo} 的结构值得解读：
+因子 $2$ 来自双轴应变在两个面内方向上等价作用；
+括号内的组合 $e_{31}-e_{33}C_{13}/C_{33}$ 是\emph{受夹}压电响应 ——
+面内应变同时通过泊松效应在 $c$ 轴上产生一个反向的应变分量，
+其比例由弹性常数比 $C_{13}/C_{33}$ 给出。忽略这一项（即只用 $e_{31}$）
+会高估压电贡献。
+
+对 AlGaN 而言 $e_{31}<0$、$e_{33}>0$、$C_{13}/C_{33}\approx0.26$，
+因此括号内为负，而 $\varepsilon>0$，故 $P_{\text{pz}}<0$ ——
+压电极化与自发极化\emph{同向}叠加。这正是 Ga 面 AlGaN/GaN 能做出
+高面密度二维电子气的原因。
+
+\subsection{极化不连续与束缚面电荷}
+\label{sec:pol-sheet}
+\index{1concept@概念!bound sheet charge@束缚面电荷}
+
+界面上的束缚面电荷等于两侧极化强度之差：
+
+\begin{equation}
+\Delta P \;=\; \left(P_{\text{sp}}^{\text{bar}} + P_{\text{pz}}^{\text{bar}}\right)
+\;-\; P_{\text{sp}}^{\text{ch}},
+\qquad
+\sigpol \;=\; \abs{\Delta P},
+\label{eq:sigma-pol}
+\end{equation}
+
+再乘上屏蔽因子得到\emph{有效}面电荷：
+
+\begin{equation}
+\boxed{\;\sigeff \;=\; s\,\sigpol\;}
+\label{eq:sigma-eff}
+\end{equation}
+
+$\sigeff$ 是本模块交给下游的\textbf{唯一}电荷量。由
+$\sigeff$ 立即得到面密度的\emph{硬上界}
+
+\begin{equation}
+\nsu \;=\; \frac{\sigeff}{q},
+\label{eq:ns-bound}
+\end{equation}
+
+即"若势垒层内电场为零、全部极化电荷都被二维电子气补偿"时的极限。
+实际面密度总是低于它，因为势垒层内必须存在电场以容纳有限厚度的势降。
+\crefchap{ch:sp1d} 报告中给出的占据率（演示器件下 $0.83$ 左右）
+正是 $\ns/\nsu$。
+
+\subsection{屏蔽因子：一个诚实的未知}
+\label{sec:pol-screening}
+\index{2qty@物理量!screening factor@屏蔽因子}
+
+\crefeq{eq:sigma-eff} 中的 $s$（参数 \akey{screening}，默认 $0.8$）
+并不是一个从第一性原理推出的量，它\emph{吸收了表面态屏蔽的全部未知物理}：
+真实器件表面存在施主型表面态，它们会俘获一部分极化电荷，
+使到达沟道的有效电荷小于理论极化值。本流水线不含表面态模型
+（那属于陷阱模块），于是这部分物理被压缩成一个可标定系数。
+
+模块文档对此的处理是坦率的：\emph{没有公认取值}，
+未经屏蔽的理论值在实践中会高估面密度，因此必须用 Hall 测量标定。
+把不确定性集中到一个显式命名、显式标记为可标定的参数上，
+比把它分散到若干个"经验修正系数"里要好 —— 至少它可被追责。
+
+\subsection{导带带阶}
+\label{sec:pol-offset}
+
+异质界面的导带带阶由两侧带隙差给出：
+
+\begin{equation}
+\Delta E_g \;=\; E_g^{\text{bar}} - E_g^{\text{ch}},
+\qquad
+\dEc \;=\; r\,\Delta E_g ,
+\label{eq:pol-offset}
+\end{equation}
+
+比例 $r$ 不在本模块中决定：本模块只交出 $\Delta E_g$（artifact 键
+\akey{band_offset_eV}），由量子模块（\crefchap{ch:sp1d}）用参数
+\akey{delta_ec_ratio}（默认 $0.7$）折算为 $\dEc$。
+这样分工的理由是：$\Delta E_g$ 是材料属性，$r$ 是模型选择，
+两者的可信度与标定方式都不同。
+
+\section{公式化与合金插值}
+\label{sec:pol-formulation}
+
+本模块的全部材料常数来自材料库，合金值按 \crefeq{eq:vegard}
+（Vegard 加弯曲项）插值。用于本模块的键为
+\akey{p_sp_C_m2}、\akey{a_lattice_A}、\akey{e31_C_m2}、
+\akey{e33_C_m2}、\akey{C13_GPa}、\akey{C33_GPa}、\akey{eps_r}、
+\akey{m_eff}、\akey{Eg_eV}。其中只有 $p_{\text{sp}}$ 与 $E_g$
+带非零弯曲系数（\crefeq{eq:bowing}）。
+
+若把材料槽换成 \pid{materials.dft}（\crefchap{ch:dft}），
+这些常数会被 DFT 覆盖值替换，而\emph{本模块一行不改} ——
+这正是 \crefchap{ch:dft} 中"零改动替换"验收的另一半。
+
+\subsection{演示器件的算例}
+\label{sec:pol-worked}
+
+下表给出演示器件（Al$_{0.25}$Ga$_{0.75}$N，$20$\U{nm} 势垒，
+$f_{\text{relax}}=1$，$s=0.8$）逐步代入的结果。所有中间量都可在
+代码中逐一复现，因此这张表同时是一个\emph{可核对的算例}。
+
+\begin{veriftable}{演示器件的极化链逐步计算（$x=0.25$，材料常数取自内置库）}{tab:pol-worked}
+\vrow{合金晶格常数 $a_{\text{bar}}$}{文献插值}{$3.16975$\U{\AA}}
+\vrow{双轴应变 $\varepsilon$，\crefeq{eq:strain}}{$>0$ 且 $<0.02$}{$6.073\times10^{-3}$}
+\vrow{合金自发极化 $P_{\text{sp}}^{\text{bar}}$}{文献插值}{$-0.04406$\U{C/m^2}}
+\vrow{合金压电极化 $P_{\text{pz}}$，\crefeq{eq:piezo}}{$<0$}{$-9.196\times10^{-3}$\U{C/m^2}}
+\vrow{沟道自发极化 $P_{\text{sp}}^{\text{ch}}$}{GaN 值}{$-0.034$\U{C/m^2}}
+\vrow{极化不连续 $\Delta P$，\crefeq{eq:sigma-pol}}{---}{$-1.9258\times10^{-2}$\U{C/m^2}}
+\vrow{极化面电荷 $\sigpol$}{$\in(1.10,1.30)\times10^{13}$\U{cm^{-2}}}{
+  $1.2020\times10^{13}$\U{cm^{-2}}}
+\vrow{有效面电荷 $\sigeff$（$s=0.8$）}{$=0.8\,\sigpol$（$10^{-6}$ 位）}{
+  $1.5407\times10^{-2}$\U{C/m^2}}
+\vrow{面密度上界 $\nsu=\sigeff/q$}{---}{$9.616\times10^{12}$\U{cm^{-2}}}
+\vrow{合金带隙 $E_g^{\text{bar}}$（$b_{E_g}=1.0$\U{eV}）}{---}{$4.285$\U{eV}}
+\vrow{导带带阶 $\Delta E_g$}{---}{$0.865$\U{eV}}
+\vnote{表中最后两行交出的是 \(\Delta E_g\) 而非 \(\dEc\)：
+      \(r=0.7\) 的折算属于\crefchap{ch:sp1d}，在此处折算会掩盖分工。
+      面电荷一行的判据即 \fpath{tests/test_plugins.py} 中的断言区间。}
+\end{veriftable}
+
+\section{计算流程与实现}
+\label{sec:pol-implementation}
+\index{3method@方法!alloy interpolation@合金插值}
+
+\subsection{流程}
+
+计算是无迭代的纯代数流程：取势垒层与沟道层 $\to$ 插值合金常数 $\to$
+算应变与压电极化 $\to$ 求极化不连续与有效面电荷 $\to$ 求带阶 $\to$
+打包 artifact。没有离散化，没有求解器，因此本模块的"离散化"一节
+（\crefsec{sec:pol-formulation}）实际上是\emph{公式化}一节：
+它的可验证内容在于公式与常数，而不在于格式。
+
+\subsection{校验}
+
+校验阶段做三件事：确认层表中同时存在 \akey{barrier} 与 \akey{channel}
+两个角色；确认极性为 Ga 面；以及——在\emph{下游}模块中——
+确认 $\sigeff>0$。最后一条之所以放在下游，
+是因为"极化电荷为零"这一情形下量子求解器无解，
+应当由消费者在自己的校验里给出与场景相关的提示
+（\crefchap{ch:sp1d} 与 \crefchap{ch:analytic_tw} 都这样做，
+并建议检查屏蔽因子与 Al 组分）。
+
+\section{验证与基准}
+\label{sec:pol-verification}
+
+极化模型的验证采取"断言解析值 + 断言趋势符号"的组合。
+数值解析值来自文献 \cite{ambacher1999,ambacher2000,ambacher2002,vurgaftman2003}；
+趋势断言则保证参数变化时\emph{方向}正确，因而在参数演化后依然有效。
+
+\begin{veriftable}{极化量的解析值与趋势}{tab:pol-verify}
+\vgroup{解析值与内部自洽}
+\vrow{面电荷 $\sigpol$（$x=0.25$）}{$\in(1.10,1.30)\times10^{13}$\U{cm^{-2}}}{
+  $1.2020\times10^{13}$\U{cm^{-2}}}
+\vrow{应变为张应变且量级合理}{$0<\varepsilon<0.02$}{两者同时成立}
+\vrow{屏蔽严格按比例缩放}{$\sigeff=0.8\,\sigpol$（$10^{-6}$ 位）}{通过}
+\vrow{压电极化为负}{$P_{\text{pz}}<0$}{通过}
+\vrow{势垒侧自发极化低于沟道侧}{$P_{\text{sp}}^{\text{bar}}<P_{\text{sp}}^{\text{ch}}$}{
+  $-0.04406 < -0.034$\U{C/m^2}}
+\vgroup{趋势符号}
+\vrow{Al 组分升高 $\Rightarrow$ 极化增强}{$\sigpol$ 单调增}{
+  $x:0.20\to0.35$ 时 $\sigpol$ 增大}
+\vrow{屏蔽增强 $\Rightarrow$ 面密度升高}{$\ns$ 单调增}{
+  $s:0.4\to0.95$ 时 $\ns$ 增大}
+\vrow{势垒增厚 $\Rightarrow$ 面密度升高}{$\ns$ 单调增}{
+  $d:15\to30$\U{nm} 时 $\ns$ 增大}
+\vrow{弛豫度降低 $\Rightarrow$ 极化减弱}{$\sigpol$ 单调增}{
+  $f_{\text{relax}}:0.5\to1.0$ 时 $\sigpol$ 增大}
+\vrow{屏蔽增强 $\Rightarrow$ 阈值更负}{$V_{\text{th}}$ 单调减}{
+  $s:0.6\to0.9$ 时 $V_{\text{th}}$ 更低}
+\vnote{最后一行涉及 \pid{extract.fom}（\crefchap{ch:fom}）的阈值估计，
+      在此列出是因为它检验的正是 $\sigeff$ 的符号与量级。}
+\end{veriftable}
+
+\begin{veriftable}{自发极化的独立对照（\crefchap{ch:dft} 的 D2 基准）}{tab:pol-d2}
+\vrow{GaN $p_{\text{sp}}$ 相对实验}{\crefchap{ch:dft} 的 D2 容差 $15\%$}{$0.0000\%$}
+\vrow{AlN $p_{\text{sp}}$ 相对实验}{同上}{$0.0000\%$}
+\vnote{两个零并非"完美吻合"的证明，而是数值上取同一参考值的必然结果；
+      真正独立的信息是表中引用的 Berry 相位方法被记录下来
+      （设计稿 §8 对 D2 的方法记录要求）。其代价与局限见 \crefchap{ch:dft}。}
+\end{veriftable}
+
+\section{误差来源与适用边界}
+\label{sec:pol-limits}
+\index{1concept@概念!validity limits@适用边界}
+
+\limitsheading
+
+\begin{bounds}
+  \item \textbf{屏蔽因子没有公认取值。} 默认 $s=0.8$ 只是起点，
+        必须用 Hall 数据标定。它吸收了表面态物理的全部未知，
+        是极化链上最大的不确定度来源（\S\ref{sec:pol-screening}）。
+
+  \item \textbf{材料常数未经独立验证。} 极化常数、弹性常数、带隙与
+        晶格常数转录自文献 \cite{ambacher2000,vurgaftman2003}，
+        在材料库中标记 \texttt{unverified}；
+        \pid{materials.dft}（\crefchap{ch:dft}）提供了一个带不确定度
+        与溯源的覆盖通道，但其自身也是文献转录。
+        跑通 L2（Hall 对比）之前，\emph{绝对数值不可信}。
+
+  \item \textbf{只支持 Ga 面。} N 面极性在校验阶段被显式拒绝，
+        而不是被静默地按 Ga 面处理 —— 后者的错误不会以异常的形式出现，
+        只会以"面密度符号不对"的形式出现，更难发现。
+
+  \item \textbf{无表面态模型。} 表面施主态的俘获、费米能级钉扎、
+        以及由此产生的栅滞后（gate lag）均不在模型内。
+        这部分物理被 \akey{screening} 一个标量所替代，
+        因此它无法描述偏压依赖的屏蔽变化。
+
+  \item \textbf{无应变弛豫的动力学。} $f_{\text{relax}}$ 是输入，
+        不是求解结果；超过临界厚度的弛豫、位错引入的应变释放
+        不在模型内。
+
+  \item \textbf{合金插值是端点插值。} 见 \crefeq{eq:vegard} 与
+        \crefchap{ch:dft} 的边界说明；簇团效应与短程有序不在其中。
+
+  \item \textbf{极性依赖的压电符号未做交叉验证。} 本模块的符号约定
+        来自 Ga 面 \cite{ambacher2000}，并通过"应变与面密度上界均为正"
+        的断言间接验证；但没有与独立来源的符号约定做过逐项比对。
+\end{bounds}
+
+\section{接口契约与小结}
+\label{sec:pol-interface}
+\index{5artifact@数据通道!polarization}
+
+{\small
+\begin{longtable}{@{}p{0.06\textwidth} p{0.22\textwidth} p{0.62\textwidth}@{}}
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+入 & \akey{structure} &
+  \akey{layers[].{role, material, thickness_nm, x_al}}（取 \akey{barrier}
+  与 \akey{channel} 两层）\\
+入 & \akey{materials} &
+  上列九个材料键（含合金插值所需的端点）\\
+出 & \akey{polarization} &
+  \akey{x_al}, \akey{barrier_thickness_nm}, \akey{channel_material},
+  \akey{eps_r_barrier}, \akey{m_eff_barrier},
+  \akey{p_sp_barrier_C_m2}, \akey{p_sp_channel_C_m2},
+  \akey{p_pz_barrier_C_m2}, \akey{delta_p_C_m2},
+  \akey{sigma_pol_C_m2}, \akey{sigma_eff_C_m2},
+  \akey{sigma_pol_cm2}, \akey{sigma_eff_cm2},
+  \akey{strain}, \akey{relaxed_fraction}, \akey{screening},
+  \akey{band_offset_eV}, \akey{lattice_a_barrier_A},
+  \akey{lattice_a_channel_A}, \akey{valley_degeneracy}\\
+\end{longtable}
+}
+
+\noindent
+下游有两个消费者，各自只需要其中一部分：\pid{physics.quantum.sp1d}
+（\crefchap{ch:sp1d}）取 $\sigeff$、势垒厚度、合金介电常数与有效质量
+以及 $\Delta E_g$；\pid{extract.fom}（\crefchap{ch:fom}）另外取
+$\sigpol$ 与 $\sigeff$ 的 cm$^{-2}$ 表示。把它们都放在\emph{一个}
+artifact 里而不是拆成两个，是因为它们来自同一次计算、共享同一组常数，
+拆开只会制造不一致的机会。
+
+\subsection*{小结}
+
+本章的结论可以概括为三点。
+
+其一，\textbf{二维电子气的来源是极化，不是掺杂。} 由
+\crefeq{eq:strain}--\crefeq{eq:sigma-eff} 得到的面电荷上界
+$\nsu=\sigeff/q$ 是整条物理链上第一个可计算的硬约束，
+也是后续所有量子模型的物理上限。
+
+其二，\textbf{公式中的每一项都有物理职责。}
+\crefeq{eq:piezo} 中受夹压电响应 $e_{33}C_{13}/C_{33}$ 不可省略；
+\crefeq{eq:sigma-pol} 中两侧自发极化必须都算；
+$f_{\text{relax}}$ 与 $s$ 虽都是标量，却代表完全不同的物理
+（应变保留比例 vs.\ 表面态屏蔽），把它们混为一谈会失去可标定性。
+
+其三，\textbf{不确定度应当被集中而非分散。} 本模块把一个真正的未知
+（表面态屏蔽）显式命名、显式标记为可标定，而不是把它摊派成
+若干个互相纠缠的"修正系数"。这样 Hall 标定才有明确的目标。
+
+\cleardoublepage

@@ -1,0 +1,172 @@
+% 附录 D —— 已知边界与欠账清单
+
+\chapter{已知边界与欠账清单}
+\label{app:debts}
+
+本附录汇总全文的"不知道"与"还没做"。它与附录 \ref{app:benchmarks}
+（已证明的）成对：一份只说成果的文档，会让使用者在第一次撞到边界时
+把它当成缺陷。
+
+\section{原理上不可达的判据}
+
+有一类"欠账"不是待办事项，而是\emph{在本离散下不可能达成}的判据。
+把它们与普通欠账分开，是因为继续投入不会使它们消失。
+
+\begin{veriftable}{原理上不可达的判据}{tab:appD-unreachable}
+\vrow{与一维自洽 SP 的带边差 $<1$\U{meV}}{设计稿 T1 的一半}{
+  \textbf{不可达}：网格把层界放在节点上，界面处被一个单元宽度抹平
+  （\crefchap{ch:mesh} 与 \crefchap{ch:transport_dd}）}
+\vrow{单个波函数是物理的束缚态}{物理性}{
+  \textbf{不成立}：势垒以上的态是有限域盒本征态。它们是三维连续态的
+  合法求积（域深度依赖 $<10^{-5}$），但单个波函数不是束缚态
+  （\crefchap{ch:sp1d}）}
+\vnote{这两条都写在对应章的 §x.6 里，此处汇总以便一次性看到全貌。
+      第一条若要达成，需要让输运网格也采用面基界面 ——
+      那会改变第 6 章的输出契约，属于架构级改动，不在当前路线图中。}
+\end{veriftable}
+
+\section{全局欠账（按优先级）}
+
+\subsection*{第一优先：使绝对数值可信}
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.4em,topsep=0.4em]
+  \item \textbf{L2 基准 + 回归门禁。} 用霍尔测量对标二维电子气面密度，
+        把测试套件接入 CI 门禁。这是\emph{一切绝对值}的前提：
+        在此之前，本文档中所有"实测"列的数字都只能作为
+        \emph{格式与守恒性}的证据，不能作为器件数值的证据。
+  \item \textbf{迁移率独立插件。} Deck 的 \akey{mobility} 槽当前为空，
+        \crefchap{ch:transport_dd} 把 $\mumu_0$ 与 $v_{\text{sat}}$
+        作为自身参数（占位值）。一个独立的迁移率插件（如场依赖模型、
+        合金散射、界面粗糙度散射）是让电流数值可信的必要条件。
+  \item \textbf{材料常数的独立验证。} \crefchap{ch:dft} 的
+        \akey{table} 后端是\emph{文献转录}，其查找表的
+        \texttt{honesty\_note} 明确声明了这一点，且全部条目
+        \akey{convergence: null}。真正的硬度提升要等
+        \akey{qe_local} 重算。
+\end{enumerate}
+
+\subsection*{第二优先：扩展物理范围}
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.4em,topsep=0.4em,start=4]
+  \item \textbf{陷阱与自热。} 电流坍塌、gate-lag、drain-lag、
+        晶格温升一概没有；因此射频大电流点的预测偏乐观。
+        对应 \akey{traps} 与 \akey{thermal} 两个空槽。
+  \item \textbf{短栅的流体动力学修正。} $L_g=150$\U{nm} 已在漂移扩散
+        假设开始失效的尺度上；速度过冲与弹道成分缺席。
+        方案给出的对策是 \pid{transport.hydro} 插件加经验修正，
+        并\textbf{在报告中标注}。
+  \item \textbf{高偏压收敛。} \crefchap{ch:transport_dd} 只覆盖到约
+        $1$\U{V} 的漏压；$V_{ds}\ge2$\U{V} 时 Newton 仍不收敛。
+        这是模型边界而非调参问题。
+  \item \textbf{\pid{materials.dft} 的相 2 与相 3。}
+        \akey{qe_local} 驱动（结构弛豫 → SCF → 应力/Born → 后处理）
+        与 \akey{qe_slurm} + SQS 合金扫描均未实现；
+        当前只完成可用性探测与清晰的失败信息。
+\end{enumerate}
+
+\subsection*{第三优先：提取链与性能}
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.4em,topsep=0.4em,start=8]
+  \item \textbf{提取链。} 完整的 IV / C--V / S 参数提取
+        （$g_m$、$f_T$、$f_{\max}$）尚未实现；
+        \crefchap{ch:fom} 只固定了 \akey{results.fom} 这个契约位置，
+        并明确标记为 \texttt{unverified}。
+  \item \textbf{精确 Jacobian 的装配代价。} \crefchap{ch:sp1d} 的
+        精确 Jacobian 使装配贵约一个数量级、整解贵 $1.5$--$1.7$ 倍。
+        两条提速路线已明确：(a) 三对角逆的\emph{半可分}（semiseparable）
+        Green 函数两步扫描降到 $O(N)$ 次向量化运算；
+        (b) 线性步改为\emph{矩阵无关}的 Krylov 方法，
+        响应只需对向量作用。
+  \item \textbf{把 \pid{nonlinear.newton} 迁到 \akey{linear} 槽。}
+        它当前的线性步是自己做的稠密 LU，因此它装不下
+        \crefchap{ch:transport_dd} 的 $1.3\times10^{5}$ 个未知量。
+        迁移之后，"换线性代数后端"才只需改一处
+        （\crefchap{ch:newton}）。
+  \item \textbf{横向细化能力。} \crefchap{ch:blocktridiag} 的块是稠密
+        存储的，横向加密代价为 $O(m^3)$；带状或嵌套剖分分解是
+        显然的下一步。
+\end{enumerate}
+
+\section{逐模块边界索引}
+
+每章的 §x.6 列出了该模块自己的适用边界。此处给出索引，
+使读者可以按模块定位：
+
+{\small
+\begin{longtable}{@{}p{0.075\textwidth} p{0.20\textwidth} p{0.60\textwidth}@{}}
+\toprule
+\textbf{章} & \textbf{模块} & \textbf{边界的要点（详见该章 §x.6）}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{章} & \textbf{模块} & \textbf{边界的要点（详见该章 §x.6）}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+6 & \pid{mesh.structured2d} &
+  界面落节点（$1.7$ 倍面密度偏差）；横向均匀无栅边缘加密；
+  张量积几何表达力有限；$N_{\min}$ 可能造成局部过密；只覆盖外延栈\\
+7 & \pid{materials.dft} &
+  文献转录非自算；全部条目缺两点收敛记录；0\,K 理想晶体；
+  无温度修正；合金为端点插值；\akey{qe_*} 未实现；
+  不确定度区间不是置信区间\\
+8 & \pid{physics.polarization.ambacher} &
+  屏蔽因子无公认取值；材料常数未独立验证；只支持 Ga 面；
+  无表面态模型；无应变弛豫动力学；合金为端点插值\\
+9 & \pid{physics.quantum.analytic_tw} &
+  不含任何微分方程；忽略波函数穿透与多亚带；
+  态密度质量取势垒侧参数（已知不一致）；$\gamma_0$ 是拟合常数；
+  不产生势剖面与波函数\\
+10 & \pid{physics.quantum.sp1d} &
+  材料常数未验证；屏蔽因子无公认取值；有效质量近似忽略非抛物性；
+  只有 $\Gamma$ 谷；盒本征态；一维近似；Anderson 回退较脆弱；
+  装配较贵；无陷阱/自热\\
+11 & \pid{transport.dd} &
+  迁移率是占位参数；只覆盖到约 $1$\U{V}；短栅速度过冲缺席；
+  界面抹平；只实现 Boltzmann 统计；缓冲层是抽象；
+  无栅电流；无陷阱/自热/瞬态；表面钉扎是工程近似；
+  PTC 参数是工程值\\
+12 & \pid{extract.fom} &
+  占位实现（\texttt{unverified}）；全耗尽假定；
+  $V_{\text{th}}$ 与量子模型无关；无串联电阻与短沟效应；
+  无栅电流；没有真正的优值链\\
+13 & \pid{nonlinear.newton} &
+  稠密线性步限制规模；校验器用逐列归一化（对耦合系统不够）；
+  不做拟 Newton；PTC 是静态的；无信赖域；
+  收敛判据依赖问题缩放；无并行\\
+14 & \pid{linear.blocktridiag} &
+  只处理块三对角（结构假设不被检查）；块稠密存储；
+  无迭代回退与条件数估计；正则化是标量且均匀；
+  不做跨块选主元；单线程\\
+\end{longtable}
+}
+
+\section{工程化欠账（文档侧）}
+
+本文档自身也有尚未兑现的工程化工作，如实列出：
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.4em,topsep=0.4em]
+  \item \textbf{章首模块标识与 \texttt{MANIFEST} 的机械比对。}
+        本文档在每个模块章开头以注释给出 \akey{module_id}、
+        \akey{module_version}、\akey{plugin_dir} 等锚点，
+        但比对尚未自动进行。
+  \item \textbf{契约键的机械比对。} 附录 \ref{app:contracts} 的单位矩阵
+        与代码中的 \texttt{ctx.put} 调用之间靠人工维护。
+  \item \textbf{数字的溯源表。} 正文中每个"实测"值目前靠
+        "可回查到测试文件"这一人工约定；一个把数字与测试断言
+        直接关联的溯源表尚未建立。
+  \item \textbf{验证表的列宽等版式约束}已记录在
+        \fpath{docs/tex/README.md}，属工程细节而非方法学问题。
+\end{enumerate}
+
+\section{一句话总结}
+
+\textbf{骨架可信，量子求解器与 Newton 求解器都验证到闭式解，
+网格收敛与 Newton 收敛阶都修到了二阶（Jacobian 严格精确）；
+漂移扩散已能跑出守恒到 $10^{-13}$ 的 IV 曲线，通过 T0 闭式解
+（$<10^{-6}$）、T2 二阶收敛与电流饱和判据；
+但绝对数值未标定，$V_{ds}\ge2$\U{V} 仍不收敛，
+基准阶梯只走到 L1。}
+
+\cleardoublepage

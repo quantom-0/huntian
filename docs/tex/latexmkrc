@@ -1,0 +1,25 @@
+# -*- perl -*-
+# =====================================================================
+#  latexmkrc —— 构建配置
+#  引擎：xelatex（中文经 ctex）。参考文献走 biber，索引由 imakeidx 驱动。
+#  用法：latexmk            （在 docs/tex 目录下）
+#        latexmk -C         （彻底清理）
+# =====================================================================
+
+$pdf_mode = 5;                      # 5 = xelatex
+
+$xelatex = 'xelatex -interaction=nonstopmode -halt-on-error -file-line-error -synctex=1 %O %S';
+
+# 中间文件与产物都放进 build/，源码目录保持干净
+$out_dir = 'build';
+$aux_dir = 'build';
+
+# biber 后端
+$bibtex_use = 2;
+
+# 反复编译直到交叉引用、目录、索引、文献全部稳定
+$max_repeat = 8;
+
+@default_files = ('main.tex');
+
+$clean_ext = 'bbl run.xml xdy ind ilg idx bcf fdb_latexmk fls synctex.gz out toc aux log';

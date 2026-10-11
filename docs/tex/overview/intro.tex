@@ -1,0 +1,151 @@
+% 总论第 1 章 —— 引言与文档范围
+% \futurechapter{ch:intro} 已在新章启用时从 future_labels.tex 删除
+
+\chapter{引言与文档范围}
+\label{ch:intro}
+
+\section{项目定位}
+
+Huntian 是一套面向 GaN 射频高电子迁移率晶体管（HEMT）的\textbf{轻量化、
+模块化工艺计算机辅助设计（TCAD）内核}。它的目标不是替代商业 TCAD 的
+全部功能，而是回答一个更窄、也更可验证的问题：
+
+\begin{quote}
+\emph{能不能用一套\emph{核心零第三方依赖}的代码，把 GaN HEMT 从极化电荷
+到电流--电压曲线的物理链完整走通，并且让这条链上的每一环都可被独立替换、
+独立验证、独立追责？}
+\end{quote}
+
+这个问题的形态决定了本文档的形态。既然每一环都可替换，那么每一环都值得
+单独成章来讲清它的方程、它的离散、它的参数依据，以及\textbf{它凭什么被相信}。
+
+\subsection{量化目标}
+
+方案给出的量化目标见 \creftab{tab:intro-goals}。把它们列在正文开头是有
+用意的：本文档全篇反复区分"格式可信"与"数值可信"，而这张表正是那条分界线
+的量化形式 —— 表里的每一项都需要\emph{实测标定}才能宣称达成，
+而截至本文档当前版本，\textbf{没有一项已经通过实测标定}。
+
+\begin{veriftable}{方案制定的量化精度目标（尚未实测标定）}{tab:intro-goals}
+\vrow{二维电子气面密度 $\ns$}{$\pm5\%$（对霍尔测量）}{未标定}
+\vrow{阈值电压 $V_{\text{th}}$}{$\pm0.15$\U{V}}{未标定}
+\vrow{饱和电流 $I_{d\max}$ / 跨导 $g_m$}{$\pm10\%$}{未标定}
+\vrow{$f_T$ / $f_{\max}$}{$\pm10$--$15\%$}{未实现（无 S 参数链）}
+\vrow{电流坍塌幅度}{$\pm20\%$}{未实现（无陷阱模型）}
+\vrow{$P_{\text{out}}$ / PAE}{$\pm10$--$15\%$}{未实现（无大信号链）}
+\vrow{单偏置点求解时间（二维，$\sim2\times10^{4}$ 节点）}{$<1$\U{s}}{见 \crefchap{ch:transport_dd}}
+\vrow{模块热插拔时间}{$<1$\U{s}，无需重启进程}{通过（见 \crefchap{ch:architecture}）}
+\end{veriftable}
+
+\subsection{五条设计原则}
+
+\begin{enumerate}[leftmargin=1.9em,itemsep=0.35em,topsep=0.4em]
+  \item \textbf{专用优于通用。} 只做 GaN 射频 HEMT，只做单极 $n$ 型电子输运，
+        以二维截面为主。通用性不是目标，可验证性才是。
+  \item \textbf{模型即插件。} 一切物理模型、求解器、后端、适配器都走统一接口，
+        可插拔、可版本化、可独立发布。
+  \item \textbf{数字只能来自求解器。} 任何自动化层（含语言模型）只负责翻译、
+        规划、诊断与解释，\emph{绝不直接输出物理数值}。
+  \item \textbf{误差可追溯。} 每个结果携带参数快照、模块版本、网格与求解器设置，
+        完全可复现。
+  \item \textbf{渐进增强。} 先在 Python 中原型验证物理，再把热路径重写到
+        高性能内核；性能与正确性分离推进。
+\end{enumerate}
+
+第 3 条在本文档中有具体体现：本章之后的每一章，
+凡是进入"实测"列的数字，都必须能追到一次具体的运行或一条具体的断言。
+这条纪律不是文风偏好，而是第 3 条原则在文档层面的落实。
+
+\section{文档的组织方式}
+\label{sec:intro-organisation}
+\index{1concept@概念!one-plugin-one-chapter@一个插件一个模块章}
+
+本文档与代码仓库的 \fpath{plugins/} 目录\textbf{一一对应}：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.30\textwidth} p{0.60\textwidth}@{}}
+\toprule
+\textbf{代码侧} & \textbf{文档侧}\\
+\midrule
+\fpath{plugins/<name>/} 一个目录 & \fpath{modules/<name>.tex} 一章\\
+\texttt{MANIFEST} 里的字段 & 章首的\emph{模块卡片}（字段顺序固定）\\
+模块的残差/Jacobian 代码 & §x.2 控制方程、§x.3 离散化、§x.4 求解算法\\
+\fpath{tests/test_<name>.py} & §x.5 验证与基准（判据 \& 实测两列）\\
+模块说明书里的"诚实边界" & §x.6 误差来源与适用边界\\
+\texttt{ctx.require}/\texttt{ctx.put} 实参 & §x.7 接口契约表\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{七段式骨架}
+
+每一模块章遵循同一副骨骼：\textbf{模块契约、控制方程与物理假设、离散化与
+公式化、求解算法与实现、验证与基准、误差来源与适用边界、接口契约与小结}。
+其中第 3、4 两节的标题会按模块类型 specialize（数值型模块写"离散化"
+与"求解算法"，解析或数据型模块写"公式化"与"合并流程"），但\textbf{两节
+都必须在}。
+
+这种一致性不是形式主义。它使读者可以在任意两章之间\textbf{横向比较同一类
+证据}：第九章的"判据 $>$ 实测"与第十章的"判据 $>$ 实测"说的是同一件事，
+因此可以并排读。它也使文档本身可以被机械化校验
+（章首的模块标识与代码中的 \texttt{MANIFEST} 逐字段比对）——
+那属于后续版本的工程化工作，见 \crefchap{ch:module-index} 的说明。
+
+\subsection{章号是冻结契约}
+
+本文档的章号不随成文先后变化：第 6--14 章是九个模块章，
+第 1--5 章是总论，附录为 A--D。在模块章尚未写成的阶段，
+章号由一份\emph{前向标签}文件声明，它只推进章计数器、不排版任何内容 ——
+因此后补的章节不会使已有的交叉引用失效。
+
+这条约定的代价写在下面，供后续维护者参考：\textbf{每写成一章，
+必须同时做两件事} ——在根文件里放入真正的 \texttt{\textbackslash input}，
+并从标签文件里删除对应的声明行；只做一半会导致章号重复计数。
+构建日志中每一条 \texttt{[huntian-doc] forward-label} 行都对应一个
+"已编号但尚未成文"的章，这是本阶段的审计凭据。
+
+\section{读者指南}
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.26\textwidth} p{0.64\textwidth}@{}}
+\toprule
+\textbf{如果你想知道} & \textbf{建议路径}\\
+\midrule
+整体怎么搭起来的 &
+  \crefchap{ch:architecture} $\to$ \crefchap{ch:dataflow} $\to$
+  \crefchap{ch:module-index}\\
+某个模块在算什么 &
+  直接翻对应章；每章 §x.2 是方程，§x.5 是"凭什么信"\\
+某段代码为什么这么写 &
+  对应章的 §x.3 与 §x.4；跨模块的取舍见 \crefchap{ch:dataflow}\\
+数字可信到什么程度 &
+  \crefchap{ch:verification-methodology} 讲判据体系；
+  每章 §x.6 列该模块自己的边界\\
+还欠什么 &
+  \crefapp{app:debts}（附录 D）汇总全部已知边界与欠账\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{本版状态与诚实声明}
+\label{sec:intro-status}
+
+本文档覆盖的状态可以用三句话概括。
+
+\textbf{其一，骨架与九个模块章已成文。} 注册中心、上下文、Deck、流水线
+四条地基全部落地；九个插件各自成章，合计 19 章 4 附录。
+
+\textbf{其二，格式可信与数值可信是两件事，本文档始终分开陈述。}
+已经验证到闭式解或收敛阶的，是\emph{离散格式}与\emph{导数}；
+尚未验证的，是\emph{绝对数值} —— 后者受制于未经标定的材料常数与迁移率。
+凡引用一个数字，本文档同时给出它的\emph{判据}（测试断言的门槛）
+与\emph{实测}（编写时观测到的值），二者缺一不可。
+
+\textbf{其三，本文档本身也接受同一条纪律。} 参考文献逐条经 DOI 核验并
+记录核验日期；未能核验的一律不进入正文。核验过程中发现的、仓库内的
+引用错误亦如实记录（见 \crefchap{ch:dft} 与参考文献条目 \texttt{ambacher2002}），
+而不是沿袭。
+
+\cleardoublepage

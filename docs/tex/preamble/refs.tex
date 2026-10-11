@@ -1,0 +1,36 @@
+% =====================================================================
+%  refs.tex —— 交叉引用宏
+%
+%  为什么不用 cleveref：
+%    cleveref 与 ctex 不兼容。最小复现是
+%        \documentclass{ctexbook}\usepackage{cleveref}
+%        \begin{document}\cref{s1}\par\section{X}\label{s1}\end{document}
+%    第二遍编译必报 "Extra \endcsname"。已确认与 hyperref 无关
+%    （ctexbook+cleveref 已复现；book+hyperref+cleveref 正常）。
+%    zref-clever 与 ctex 兼容，但不提供中文引用名，而本文档要求
+%    "第 10 章""式 (3)""表 2"这样的中文形态。
+%
+%  因此本文档自带一组\emph{按类型区分}的引用宏，建立在 \hyperref + \ref*
+%  之上：零宏包风险，输出形态完全可控，且链接照常可用。
+%
+%  纪律：正文中禁止写死"见 §4.2"这类字面编号，一律使用下列宏。
+%        新增引用类型时在此处扩展，不要在正文里就地拼字符串。
+% =====================================================================
+
+%  \nref{label}{text} —— 带超链接的文本（\ref* 不产生嵌套链接）
+\newcommand{\nref}[2]{\hyperref[#1]{#2}}
+
+%  章：第 10 章
+\newcommand{\crefchap}[1]{\nref{#1}{第\,\ref*{#1}\,章}}
+%  节：第 10.2 节
+\newcommand{\crefsec}[1]{\nref{#1}{第\,\ref*{#1}\,节}}
+%  式：式 (3)
+\newcommand{\crefeq}[1]{式~\eqref{#1}}
+%  表：表 2
+\newcommand{\creftab}[1]{\nref{#1}{表~\ref*{#1}}}
+%  图：图 1
+\newcommand{\creffig}[1]{\nref{#1}{图~\ref*{#1}}}
+%  附录：附录 A
+\newcommand{\crefapp}[1]{\nref{#1}{附录~\ref*{#1}}}
+%  算法/代码块
+\newcommand{\creflst}[1]{\nref{#1}{代码~\ref*{#1}}}

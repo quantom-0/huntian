@@ -1,0 +1,343 @@
+% module_id: physics.quantum.analytic_tw
+% module_version: 0.1.0
+% plugin_dir: plugins/quantum_analytic_tw
+% source_files: plugins/quantum_analytic_tw/__init__.py
+% tests: tests/test_plugins.py, tests/test_hotswap_quantum.py
+
+\chapter{解析三角阱基线}
+\label{ch:analytic_tw}
+
+\begin{quote}
+\small
+\noindent\textbf{模块标识}\quad\pid{physics.quantum.analytic_tw}\qquad
+\textbf{版本}\quad 0.1.0\qquad
+\textbf{类别}\quad physics
+\end{quote}
+
+\noindent
+本章记述一个\emph{解析}模型：用三角阱近似与电荷控制关系，闭式地估计
+二维电子气的面密度与两个特征能量。它在流水线中扮演两个角色 ——
+既是一个够用的快速估计，也是 \crefchap{ch:sp1d} 的自洽求解器所要替换的
+\textbf{基线}。后一个角色是本项目架构主张的第一次实战验收：
+两个模块声明同一能力、产出同一组 artifact 键，替换只改 Deck 里的一行绑定。
+
+\section{模块契约}
+\label{sec:tw-contract}
+\index{4module@模块!physics.quantum.analytic\_tw}
+
+\begin{modulecard}{physics.quantum.analytic\_tw}{0.1.0}
+  \cardrow{类别}{physics（物理模型，流水线阶段）}
+  \cardrow{能力}{quantum, quantum.analytic, quantum.triangular\_well}
+  \cardrow{依赖 artifact}{polarization}
+  \cardrow{产出 artifact}{quantum, ns}
+  \cardrow{验证状态}{partially-verified}
+  \cardrow{源码}{\fpath{plugins/quantum_analytic_tw/}}
+  \cardrow{测试}{\fpath{tests/test_plugins.py}、\fpath{tests/test_hotswap_quantum.py}}
+  \cardsep
+  \cardrow{可标定参数}{\akey{phi_b_0_eV}\calib、\akey{phi_b_x_eV}\calib、
+    \akey{delta_ec_ratio}\calib、\akey{gamma0_eV_m43}\calib}
+  \cardrow{算法}{阻尼不动点迭代（无需求解器协作者）}
+\end{modulecard}
+
+本模块的说明书里有一句加粗的边界声明，值得原样保留：
+\emph{"这是解析三角阱估计，\textbf{不是}自洽的薛定谔--泊松求解"}。
+把这句话写进模块契约而不是文档脚注，是因为这两者的输出格式完全相同 ——
+下游无法从数据上区分它们，只能从版本号与 artifact 里的 \akey{model} 字段区分。
+
+\section{电荷控制模型}
+\label{sec:tw-model}
+\index{1concept@概念!charge control@电荷控制}
+
+\subsection{三角阱近似}
+\label{sec:tw-triangular}
+\index{1concept@概念!triangular well@三角阱}
+
+在强极化面电荷的作用下，沟道侧的导带被拉出一个深而窄的势阱。
+若假定势阱内的电场\emph{均匀}（等价于忽略二维电子气自身的屏蔽对势形的
+反馈），则势能呈\emph{线性}—— 这就是三角阱近似。在此近似下基态本征能量
+有熟知的标度形式
+
+\begin{equation}
+E_0 \;=\; \gamma_0\,\ns^{2/3},
+\label{eq:e0}
+\end{equation}
+
+$\gamma_0$ 是与有效质量、介电常数与电场标度有关的常数，
+在本仓库中取 GaN 的常用值 $\gamma_0 = 2.123\times10^{-12}$\U{eV\cdot m^{4/3}}
+\cite{ambacher2000}（参数 \akey{gamma0_eV_m43}）。$\ns^{2/3}$ 的标度
+来自 Airy 函数的零点：三角阱中 $E\propto F^{2/3}$，而电场 $F$ 又正比于
+$\ns$。
+
+\subsection{电荷控制关系}
+\label{sec:tw-charge-control}
+
+器件结构自栅极到沟道是一串串联的电压降。设势垒层厚度 $d$、
+相对介电常数 $\epsr$，势垒层内的电场由"未被二维电子气补偿的那部分极化电荷"
+决定。在完全耗尽的假定下，栅压需承担肖特基势垒、势垒层压降与
+费米能级抬升三项，于是势垒层内的面电荷为
+$\sigeff - q\ns$，压降为
+$(\sigeff-q\ns)\,d/(\epsr\epsO)$。令它等于 $\phib + \Ef - \dEc$，解出
+
+\begin{equation}
+\boxed{\;
+\ns \;=\; \frac{\sigeff}{q}
+\;-\; \frac{\epsr\,\epsO}{q\,d}\,
+\Bigl(\phib + \Ef - \dEc\Bigr)
+\;}
+\label{eq:charge-control}
+\end{equation}
+
+全部能量以\U{eV}计、全部电势以\U{V}计，二者数值相等，
+故 \crefeq{eq:charge-control} 中不出现额外的换算因子。
+第一项是\emph{无势垒压降}的极限
+
+\begin{equation}
+\nsu \;=\; \frac{\sigeff}{q},
+\label{eq:tw-upper}
+\end{equation}
+
+即 \crefeq{eq:ns-bound} 给出的硬上界；第二项是有限势垒厚度必须付出的代价。
+
+\subsection{费米能级与简并}
+\label{sec:tw-fermi}
+
+二维电子气的面密度与费米能级之间是二维态密度下的 Fermi--Dirac 关系。
+在"基态占据 + 简并抬升"的近似下（参数 \akey{include_fermi}，
+默认开启），
+
+\begin{equation}
+\Ef \;=\; E_0 \;+\; \frac{\pi\hb^{2}}{q\,\meff\,g_v}\,\ns ,
+\label{eq:tw-ef}
+\end{equation}
+
+$\meff$ 为势垒材料的有效质量\footnote{这是一个应当指出的不一致：
+      在 \crefeq{eq:tw-ef} 中，二维电子气位于\emph{沟道}，
+      因此态密度质量原则上应取沟道材料的 $\meff$，而实现取的是
+      极化模块交出的势垒侧 $\meff$。对 AlGaN/GaN，
+      两者相差 $0.30$ 与 $0.20$，因此这一项被高估约 $50\%$。
+      由于该项本身只占 $\Ef$ 的约五分之一（见 \creftab{tab:tw-vs-sp}），
+      对 $\ns$ 的影响在千分位量级，故未修改；此处如实记录。}，
+$g_v$ 为谷简并度。$g_v$ 的引入是把二维态密度按能谷数成倍放大，
+是谷简并度在本模型中的\emph{唯一}作用。
+
+\subsection{自洽方程组}
+
+\crefeq{eq:e0}、\crefeq{eq:tw-ef} 与 \crefeq{eq:charge-control} 构成一个关于
+$\ns$ 的标量非线性方程：
+
+\begin{equation}
+\ns \;=\; F(\ns),
+\qquad
+F(\ns) \;=\; \nsu - \frac{\epsr\epsO}{q\,d}
+\Bigl(\phib + E_0(\ns) - \dEc\Bigr)
+- \frac{\epsr\epsO}{d}\cdot\frac{\pi\hb^{2}}{q^{2}\meff g_v}\,\ns ,
+\label{eq:tw-fixedpoint}
+\end{equation}
+
+其中第二、三项分别来自 $E_0$ 与 \crefeq{eq:tw-ef} 的简并项。
+$F$ 关于 $\ns$ 单调\emph{下降}：$\ns$ 增大使势阱变浅（$E_0$ 上升）
+且费米能级抬升，两者都要求更大的栅压来维持，故可容纳的电荷减少。
+单调性保证不动点唯一，也保证迭代只要收敛，收敛到的就是唯一的物理根。
+
+\section{不动点映射与阻尼迭代}
+\label{sec:tw-formulation}
+
+\subsection{裸映射的增益}
+
+把 \crefeq{eq:tw-fixedpoint} 写成不动点形式后，其收缩性由
+$\abs{\mathrm{d}F/\mathrm{d}\ns}$ 决定。由 $E_0=\gamma_0\ns^{2/3}$，
+
+\begin{equation}
+\der{E_0}{\ns} \;=\; \tfrac{2}{3}\,\gamma_0\,\ns^{-1/3},
+\label{eq:tw-de0}
+\end{equation}
+
+在演示器件的量级（$\ns\sim8\times10^{12}$\U{cm^{-2}}）下，
+$\mathrm{d}E_0/\mathrm{d}\ns \sim 10^{-14}$\U{eV\cdot m^{2}}，
+乘上 $\epsr\epsO/(q d)\sim10^{13}$\U{m^{-2}/eV} 后约为 $0.1$ 量级；
+简并项给出另一个量级相近的正贡献。二者之和决定了映射的收缩率 ——
+它是一个\emph{收缩}映射，但收缩率不算小，因此裸迭代收敛慢且对初值敏感。
+
+\subsection{阻尼迭代}
+
+实现采用带阻尼的不动点迭代（参数 \akey{relaxation}，默认 $0.5$）：
+
+\begin{equation}
+\ns^{(k+1)} \;=\; \ns^{(k)} + \beta\,\bigl(F(\ns^{(k)}) - \ns^{(k)}\bigr),
+\label{eq:tw-iteration}
+\end{equation}
+
+初值取上界的一半 $\ns^{(0)}=\tfrac12\nsu$。
+收敛判据是\emph{相对}判据
+
+\begin{equation}
+\abs{\ns^{(k+1)}-\ns^{(k)}} \;\le\; \varepsilon\cdot\max(\nsu,1),
+\qquad \varepsilon = 10^{-10}\ \text{（参数 \akey{tolerance}）},
+\label{eq:tw-convergence}
+\end{equation}
+
+取 $\max(\nsu,1)$ 而非 $\nsu$ 是为了在 $\sigeff\to0$（无势阱）时
+避免零除。迭代上限 \akey{max_iterations} 默认 $500$，
+超出即报告未收敛，而不是静默返回最后一个值。
+
+收敛后，$E_0$ 与 $\Ef$ 在最终的 $\ns$ 处被\emph{重新计算一遍}。
+这一步不是形式：迭代过程中最后一次更新可能已经跳出容差，
+用旧的 $E_0$、$\Ef$ 打包会与 $\ns$ 不自洽。
+
+\subsection{肖特基势垒高度}
+
+栅势垒高度有两个来源，由参数 \akey{barrier_source} 控制：
+Deck 的 \akey{device.gate.barrier_eV}（默认优先），
+或解析拟合 $\phib = \phib^{(0)} + \phib^{(x)}\,x$
+（默认 $0.84 + 0.39x$\U{eV}）。哪一路被采用会写进 artifact 的
+\akey{phi_b_source} 字段 —— 演示器件取 Deck 值 $0.94$\U{eV}。
+
+\section{验证与基准}
+\label{sec:tw-verification}
+
+\begin{veriftable}{解析基线的不变量、契约与趋势}{tab:tw-verify}
+\vgroup{物理不变量}
+\vrow{面密度落在物理区间}{$4.0\times10^{12}<\ns<1.2\times10^{13}$\U{cm^{-2}}}{通过}
+\vrow{面密度低于极化上界}{$\ns<\nsu$}{通过（占据率 $>0$）}
+\vrow{费米能级不低于基态}{$\Ef\ge E_0$}{通过}
+\vrow{不动点收敛}{converged 且迭代数 $<500$}{通过}
+\vrow{势垒高度取自 Deck}{\akey{phi_b_source} $=$ \akey{deck}；
+  $\phib=0.94$\U{eV}}{精确到 $10^{-9}$}
+\vgroup{趋势符号}
+\vrow{屏蔽增强 $\Rightarrow$ $\ns$ 升高}{单调增}{通过}
+\vrow{势垒增厚 $\Rightarrow$ $\ns$ 升高}{单调增}{通过}
+\end{veriftable}
+
+\subsection{与自洽解的定量对照}
+
+解析模型的价值只有在与自洽解对照时才看得清。同一器件
+（Al$_{0.25}$Ga$_{0.75}$N/GaN，$20$\U{nm} 势垒，$L_g=150$\U{nm}，
+$s=0.8$）下两者的差别具有明确的\emph{物理形态}：
+
+\begin{veriftable}{解析三角阱与自洽解的对照（同器件）}{tab:tw-vs-sp}
+\vrow{量}{解析三角阱}{自洽 SP（差）}
+\vrow{$\ns$ (\U{cm^{-2}})}{$7.58287\times10^{12}$}{$7.95848\times10^{12}$（$+4.95\%$）}
+\vrow{$\sigeff/q$ 占据率}{$0.7886$}{$0.8276$（$+4.95\%$）}
+\vrow{$\Ef$ 距界面带边 (\U{eV})}{$0.461018$}{$0.308840$（$-33.0\%$）}
+\vrow{$E_0$ 距界面带边 (\U{eV})}{$0.380340$}{$0.229336$（$-39.7\%$）}
+\vrow{$\Ef-E_0$ (\U{eV})}{$0.0806778$}{$0.0795039$（$-1.46\%$）}
+\vnote{对照数据与 \crefchap{ch:sp1d} 的 \creftab{tab:sp1d-vs-analytic} 为同一组，
+      此处从解析模型一侧重述。}
+\end{veriftable}
+
+\noindent
+读法很关键：两个模型对\emph{势}的看法差别很大（$\Ef$ 与 $E_0$ 都掉了约
+三分之一），但对\emph{统计}的看法收敛到同一处 —— 决定 $\ns$ 的亚带间距
+$\Ef-E_0$ 只差 $1.46\%$。这解释了为什么一个没有解任何微分方程的
+解析式能给出仅偏 $5\%$ 的面密度：它恰好把"势阱深度"与"统计抬升"
+这两个误差抵消在了同一个方向上。
+
+\subsection{即插即用：被替换的那一侧}
+
+本模块最重要的验收不在自身，而在于它\emph{能被替换}
+（\fpath{tests/test_hotswap_quantum.py}）：
+
+\begin{veriftable}{能力与 artifact 契约的替换验收}{tab:tw-hotswap}
+\vrow{两个模块声明同一能力}{均含 \texttt{quantum}}{通过}
+\vrow{产出同一组契约键}{前七个键逐一相同}{通过}
+\vrow{下游零改动}{\pid{extract.fom} 与流水线均不变}{通过}
+\vrow{版本钉住}{解析 Deck 的 \texttt{\^{}0.1.0} \emph{不会}被解析到 sp1d}{通过}
+\vrow{第三方实现可热插拔}{自定义实现同样可挂上}{通过}
+\vnote{第三个是本项目"模块即插件"主张的核心证据：
+      替换一个物理模型所需的工作量恰好是 Deck 里的一行绑定。}
+\end{veriftable}
+
+\section{误差来源与适用边界}
+\label{sec:tw-limits}
+\index{1concept@概念!validity limits@适用边界}
+
+\limitsheading
+
+\begin{bounds}
+  \item \textbf{本模型不含任何微分方程。} 它不解析波函数、不解泊松方程、
+        不做自洽。因此它给出的不是"近似解"，而是\emph{另一个模型的解}。
+        凡涉及势形、波函数或有多个亚带的问题，本模型在原理上无能。
+
+  \item \textbf{忽略波函数向势垒的穿透。} 这是三角阱近似的直接后果；
+        \crefchap{ch:sp1d} 的自洽解显示势阱实际更浅、波函数有可观的
+        势垒穿透，使 $E_0$ 与 $\Ef$ 都低约三分之一。
+
+  \item \textbf{忽略多亚带占据。} 只有一个基态被占据，
+        而自洽解给出的多亚带阶梯与真实的有效质量都不在本模型内。
+
+  \item \textbf{态密度质量取的是势垒侧参数。} 见 \crefeq{eq:tw-ef}
+        的脚注：对 AlGaN/GaN 该质量被高估约 $50\%$，
+        影响落在千分位量级，但这是一处已知的不一致。
+
+  \item \textbf{$\gamma_0$ 是一个拟合常数。} $2.123\times10^{-12}$
+        \U{eV\cdot m^{4/3}} 取自文献对 GaN 的取值
+        \cite{ambacher2000}，它把三角阱的电场标度关系吸收成一个数；
+        换成别的材料体系必须重新标定。
+
+  \item \textbf{不产生势剖面与波函数。} artifact 中没有
+        \akey{profiles}、没有亚带能量列表、没有束缚态数目 ——
+        下游若需要这些，只能换用 \crefchap{ch:sp1d}。
+
+  \item \textbf{材料常数与屏蔽因子的不确定度原样继承。} 见
+        \crefchap{ch:polarization} 的边界一节；本模型不引入新的
+        不确定度，但也不消解任何已有的。
+
+  \item \textbf{绝对数值未经标定。} 与全流水线一致：
+        L2（Hall 对比）之前，绝对面密度不可信，可用的是趋势与量级。
+\end{bounds}
+
+\section{接口契约与小结}
+\label{sec:tw-interface}
+\index{5artifact@数据通道!ns}
+
+{\small
+\begin{longtable}{@{}p{0.06\textwidth} p{0.22\textwidth} p{0.62\textwidth}@{}}
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+入 & \akey{polarization} &
+  \akey{barrier_thickness_nm}, \akey{eps_r_barrier}, \akey{m_eff_barrier},
+  \akey{sigma_eff_C_m2}, \akey{x_al}, \akey{band_offset_eV}\\
+入 & \akey{gate}（可选） & \akey{barrier_eV}（\akey{barrier_source="deck"} 时）\\
+出 & \akey{quantum} &
+  契约键 \akey{ns_m2}, \akey{ns_cm2}, \akey{ns_upper_bound_cm2},
+  \akey{e0_eV}, \akey{ef_eV}, \akey{phi_b_eV}, \akey{phi_b_source},
+  \akey{delta_ec_eV}；另加 \akey{dos_coefficient_eV_m2}、
+  \akey{capacitance_factor_per_V_m2}、\akey{occupancy_fraction}、
+  \akey{iterations}, \akey{converged}, \akey{residual_m2}\\
+出 & \akey{ns} & 标量面密度（\U{cm^{-2}}）\\
+\end{longtable}
+}
+
+\noindent
+与 \crefchap{ch:sp1d} 相比，本模块多交出两个\emph{模型系数}
+（\akey{dos_coefficient_eV_m2} 与 \akey{capacitance_factor_per_V_m2}）。
+它们不是契约键，而是诊断量：把 \crefeq{eq:charge-control} 与 \crefeq{eq:tw-ef}
+中的两个组合系数显式暴露出来，使读者可以在不读代码的情况下复算整个不动点映射。
+
+\subsection*{小结}
+
+本章的结论可以概括为三点。
+
+其一，\textbf{"解析近似"与"自洽求解"是两个模型，不是精度等级。}
+二者输出同样的 artifact，因此\emph{必须在契约里可区分}
+（\akey{model} 字段与模块版本），也必须在文档里可区分（本章与
+\crefchap{ch:sp1d}）。
+
+其二，\textbf{它的偏差形态是可解释的，因而是有用的。}
+$+4.95\%$ 的面密度偏差来自势阱深度与统计抬升的相互抵消，
+而 $-33\%$ 与 $-39.7\%$ 的能级偏差来自势形的错误。
+理解这一点，比记住一个"误差 $5\%$"的结论更有价值。
+
+其三，\textbf{它的历史角色是基线。} 本模块存在的最大意义，
+是被 \crefchap{ch:sp1d} 在不改动任何下游模块的前提下替换掉 ——
+这是本项目对"模块即插件"的第一次实战验收。
+
+\cleardoublepage

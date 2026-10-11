@@ -1,0 +1,73 @@
+% =====================================================================
+%  math.tex —— 全局数学宏
+%  规则：正文中的物理量一律走本文件的宏，禁止裸写下标；
+%        符号表（frontmatter/notation.tex）与本文件必须一一对应。
+% =====================================================================
+
+% ---- 正体算子 --------------------------------------------------------
+\DeclareMathOperator{\diag}{diag}
+\DeclareMathOperator{\tridiag}{tridiag}
+\DeclareMathOperator{\rank}{rank}
+\DeclareMathOperator{\spann}{span}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+
+% ---- 微分 ------------------------------------------------------------
+\newcommand{\dd}{\mathrm{d}}                       % 直立的 d
+\newcommand{\der}[2]{\frac{\dd #1}{\dd #2}}        % 全导数
+\newcommand{\pder}[2]{\frac{\partial #1}{\partial #2}}
+
+% ---- 常数与数 --------------------------------------------------------
+\newcommand{\ii}{\mathrm{i}}                       % 虚数单位
+\newcommand{\ee}{\mathrm{e}}                       % 自然对数底
+\newcommand{\kb}{k_{\mathrm{B}}}                   % 玻尔兹曼常数
+\newcommand{\kT}{k_{\mathrm{B}}T}                  % 热能
+\newcommand{\epsO}{\varepsilon_{0}}                % 真空介电常数
+\newcommand{\epsr}{\varepsilon_{\mathrm{r}}}       % 相对介电常数
+%  面的等效相对介电常数。单独定义一个宏，因为它带上标：写成
+%  \epsr^{\mathrm{face}}_i 会因 \epsr 自带下标而触发 "Double subscript"。
+\newcommand{\epsface}{\varepsilon^{\mathrm{face}}}
+
+%  ⚠ 网格节点索引必须走下面这三个宏（逗号下标形式）。
+%  \Ec 与 \epsr 本身已经带下标，再写 \Ec_i 就是"同一个基上的两个下标"，
+%  TeX 会报 Double subscript。这是本文件里最容易重犯的一类错误，
+%  新增带角标的物理量宏时请一并在此登记。
+\newcommand{\Eci}[1]{E_{\mathrm{c},#1}}                    % E_{c,i}
+\newcommand{\Ecifl}[1]{E_{\mathrm{c},#1}^{\mathrm{full}}}  % E_{c,i}^{full}
+\newcommand{\epsri}[1]{\varepsilon_{\mathrm{r},#1}}        % eps_{r,i}
+\newcommand{\hb}{\hbar}                            % 约化普朗克常数
+
+% ---- 物理量 ----------------------------------------------------------
+\newcommand{\Ec}{E_{\mathrm{c}}}                   % 导带底
+\newcommand{\Ev}{E_{\mathrm{v}}}                   % 价带顶
+\newcommand{\Ef}{E_{\mathrm{F}}}                   % 费米能级
+\newcommand{\Ei}{E_{i}}                            % 第 i 个亚带能级
+\newcommand{\Ej}{E_{j}}                            % 第 j 个亚带能级（微扰求和用）
+\newcommand{\ns}{n_{\mathrm{s}}}                   % 二维面密度
+\newcommand{\nsu}{n_{\mathrm{s}}^{\max}}           % 面密度上界 sigma_eff/e
+\newcommand{\meff}{m^{*}}                          % 有效质量
+\newcommand{\mO}{m_{0}}                            % 自由电子质量
+\newcommand{\phib}{\phi_{\mathrm{b}}}              % 肖特基势垒高度
+\newcommand{\dEc}{\Delta E_{\mathrm{c}}}           % 导带带阶
+\newcommand{\sigpol}{\sigma_{\mathrm{pol}}}        % 极化面电荷
+\newcommand{\sigeff}{\sigma_{\mathrm{eff}}}        % 屏蔽后有效面电荷
+\newcommand{\Jnn}{J_{n}}                           % 电子电流密度
+\newcommand{\mumu}{\mu}                            % 迁移率
+\newcommand{\NC}{N_{\mathrm{C}}}                   % 导带有效态密度
+%  带有效质量修正与节点索引的导带态密度。同样必须整体定义：
+%  写成 \NC\,_{\text{eff},i} 会因 \NC 自带下标而触发 Double subscript。
+\newcommand{\NCeff}[1]{N_{\mathrm{C,eff},#1}}      % N_{C,eff,i}
+
+% ---- 记号算子 --------------------------------------------------------
+\newcommand{\avg}[1]{\left\langle #1 \right\rangle}   % 期望值
+\newcommand{\abs}[1]{\left\lvert #1 \right\rvert}     % 绝对值
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}    % 范数
+\newcommand{\T}{^{\mathsf{T}}}                        % 转置
+\newcommand{\dg}{^{\dagger}}                          % Moore-Penrose 伪逆
+\newcommand{\mat}[1]{\bm{#1}}                         % 矩阵
+
+% ---- 单位 ------------------------------------------------------------
+%  用法：\U{cm^{-2}}  ->  直立罗马体的单位
+%  用 \ensuremath 包裹，使其在文本模式与数学模式中都能用
+%  （表格与符号表里大量按文本模式书写，必须两种模式通吃）。
+\newcommand{\U}[1]{\ensuremath{\,\mathrm{#1}}}

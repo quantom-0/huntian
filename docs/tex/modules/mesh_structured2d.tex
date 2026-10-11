@@ -1,0 +1,340 @@
+% module_id: mesh.structured2d
+% module_version: 0.1.0
+% plugin_dir: plugins/mesh_structured2d
+% source_files: plugins/mesh_structured2d/__init__.py
+% tests: tests/test_plugins.py
+%
+% 模块章模板 —— 见 modules/quantum_sp1d.tex 文件头的骨架说明。
+% x.3 与 x.4 两槽对非数值型模块使用模块专属标题，但两槽都必须在。
+
+\chapter{结构化二维网格生成器}
+\label{ch:mesh}
+
+\begin{quote}
+\small
+\noindent\textbf{模块标识}\quad\pid{mesh.structured2d}\qquad
+\textbf{版本}\quad 0.1.0\qquad
+\textbf{类别}\quad mesh
+\end{quote}
+
+\noindent
+本章记述器件几何到计算网格的映射。这是整条流水线的第一个阶段：它把外延层表
+与版图参数转成一张\textbf{张量积}（结构化）网格，供后续的极化、量子与输运
+模块共享。此处的决策看似只是"划分网格"，但它决定了后续所有算子能长成什么
+形状 —— \crefchap{ch:transport_dd} 的 Jacobian 之所以是块三对角、可以用
+$O(n_zm^{3})$ 的直接法求解，前提正是本章产出的结构化网格。
+
+\section{模块契约}
+\label{sec:mesh-contract}
+\index{4module@模块!mesh.structured2d}
+
+\begin{modulecard}{mesh.structured2d}{0.1.0}
+  \cardrow{类别}{mesh（网格生成，流水线阶段）}
+  \cardrow{能力}{mesh, mesh.structured2d}
+  \cardrow{依赖 artifact}{structure}
+  \cardrow{产出 artifact}{mesh}
+  \cardrow{验证状态}{partially-verified}
+  \cardrow{源码}{\fpath{plugins/mesh_structured2d/}}
+  \cardrow{测试}{\fpath{tests/test_plugins.py}（DemoRunTests 与 ParameterTrendTests 的 mesh 部分）}
+  \cardsep
+  \cardrow{可标定参数}{无}
+\end{modulecard}
+
+本模块\textbf{没有任何可标定参数}。它的四个参数（\akey{nx}、
+\akey{target_spacing_nm}、\akey{min_nodes_per_layer}、
+\akey{lateral_margin_um}）都是几何与数值分辨率的\emph{选择}，
+而不是需要向实验数据拟合的物理量。这一区分在流水线层面是重要的：
+自动拟合循环只应触碰可标定量，网格分辨率不在此列。
+
+\section{问题提法与几何假设}
+\label{sec:mesh-problem}
+\index{1concept@概念!structured grid@结构化网格}
+
+\subsection{输入：器件结构的描述}
+\label{sec:mesh-input}
+
+本模块消费 \akey{structure} 这一 artifact，其结构由 Deck 的
+\texttt{DeviceSpec} 定义：
+
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.24\textwidth} p{0.66\textwidth}@{}}
+\toprule
+\textbf{字段} & \textbf{含义}\\
+\midrule
+\akey{name}, \akey{substrate} & 器件标识与衬底材料键\\
+\akey{layers[]} & 外延层表，\emph{自表面向下}排列；每层给出
+  \akey{name}, \akey{material}, \akey{role}, \akey{thickness_nm}, \akey{x_al},
+  \akey{doping_cm3}, \akey{doping_kind}\\
+\akey{gate} & \akey{length_um}, \akey{kind}, \akey{barrier_eV}, \akey{workfunction_eV}\\
+\akey{geometry} & \akey{gate_width_um}, \akey{source_gate_spacing_um},
+  \akey{gate_drain_spacing_um}, \akey{fingers}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+其中 \akey{role} 是层在电学上的功能标签（\akey{barrier}、\akey{channel}、
+\akey{buffer} 等\index{1concept@概念!layer role@层功能标签}）。下游模块
+\emph{按角色而非按层名}定位自己的作用区：\pid{physics.polarization.ambacher}
+（\crefchap{ch:polarization}）通过 \akey{role="barrier"} 与
+\akey{role="channel"} 找到势垒与沟道。校验层要求恰好一个势垒层与一个沟道层，
+并要求势垒层的 \akey{x_al} 严格为正 —— 因为"势垒不含铝"在物理上是矛盾的。
+
+\subsection{张量积假设}
+\label{sec:mesh-assumption}
+\index{1concept@概念!tensor-product grid@张量积网格}
+
+网格被假定为\emph{张量积}形式：$\mathcal{G}=\mathcal{X}\times\mathcal{Z}$，
+即横向节点集合与竖直节点集合的笛卡尔积。其等价表述是：竖直方向的分层只随
+$z$ 变化，横向的加密只随 $x$ 变化，二者互不干涉。这一假设带来两个直接后果：
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.3em,topsep=0.35em]
+  \item \textbf{网格可用两个一维数组完整描述}，节点坐标是
+        $(x_i,z_j)$ 的直积，无须存储连接关系；单元是规则矩形；
+  \item \textbf{二维算子可以按行分块}：把横向索引排在前、竖直索引排在后，
+        则竖直方向上的耦合只发生在相邻的两"行"之间，整个 Jacobian 天然是
+        \emph{块三对角}的。
+\end{itemize}
+
+第二条是本模块对全流水线最重要的贡献。它把二维隐式求解的线性代数代价从
+一般的 $O\big((n_xn_z)^{3}\big)$ 降到 $O\big(n_z(n_xm)^{3}\big)$
+（$m$ 为每个横向节点携带的未知量数），见 \crefchap{ch:blocktridiag}。
+
+代价是几何表达能力：张量积网格\emph{无法}表达倾斜台面、凹槽栅、再生长等
+非规则结构。本模块接受的正是这一取舍，理由见 \S\ref{sec:mesh-limits}。
+
+\section{网格构造的公式化}
+\label{sec:mesh-formulation}
+\index{3method@方法!grid generation@网格构造}
+
+\subsection{竖直轴：逐层定节点数}
+\label{sec:mesh-vertical}
+
+设层表自表面向下依次为 $l=1,\dots,L$，第 $l$ 层厚度为 $t_l$。竖直轴按层分段构造，
+每层的\emph{单元数}取
+
+\begin{equation}
+n_l \;=\; \max\!\left(N_{\min},\ \mathrm{round}\!\left(\frac{t_l}{h_{\text{target}}}\right)\right),
+\label{eq:mesh-ncells}
+\end{equation}
+
+其中 $h_{\text{target}}$ 是目标节点间距（参数 \akey{target_spacing_nm}），
+$N_{\min}$ 是每层单元数下限（参数 \akey{min_nodes_per_layer}，默认 $5$）。
+层内节点\emph{均匀}：
+
+\begin{equation}
+z^{(l)}_j \;=\; z^{(l)}_{\text{top}} \;+\; t_l\,\frac{j}{n_l},
+\qquad j=0,1,\dots,n_l ,
+\label{eq:mesh-layer-nodes}
+\end{equation}
+
+而层顶坐标由游标累加得到：$z^{(1)}_{\text{top}}=0$，
+$z^{(l+1)}_{\text{top}}=z^{(l)}_{\text{top}}+t_l$。相邻两层\emph{共享}分界节点，
+因此全局节点总数为
+
+\begin{equation}
+N_z \;=\; 1+\sum_{l=1}^{L} n_l .
+\label{eq:mesh-node-count}
+\end{equation}
+
+\crefeq{eq:mesh-ncells} 中的下限 $N_{\min}$ 是为极薄层设的保护：若某层厚度远小于
+$h_{\text{target}}$，四舍五入会把该层的单元数压到 $0$ 或 $1$，使该层的材料属性
+在离散意义下消失。下限把它强行撑到 $N_{\min}$ 格。这是一把双刃剑，
+其副作用见 \S\ref{sec:mesh-limits}。
+
+\subsection{横向轴：以栅足迹为锚}
+\label{sec:mesh-lateral}
+
+横向轴是\emph{均匀}的，其范围由三个接触的位置决定。以栅中心为原点，
+源、漏接触位于
+
+\begin{equation}
+x_{S} \;=\; -\left(\frac{L_g}{2}+L_{sg}\right),
+\qquad
+x_{D} \;=\; +\left(\frac{L_g}{2}+L_{gd}\right),
+\label{eq:mesh-contacts}
+\end{equation}
+
+$L_g$ 为栅长（\akey{gate.length_um}），$L_{sg}$、$L_{gd}$ 为源栅与栅漏间距。
+再向外各留出边距 $M$（参数 \akey{lateral_margin_um}）：
+
+\begin{equation}
+x_{\min} \;=\; x_{S}-M, \qquad x_{\max} \;=\; x_{D}+M,
+\qquad
+\Delta x \;=\; \frac{x_{\max}-x_{\min}}{n_x-1},
+\label{eq:mesh-lateral}
+\end{equation}
+
+节点为 $x_i=x_{\min}+i\,\Delta x$，$i=0,\dots,n_x-1$。
+把栅中心固定在原点是一种\emph{约定}，好处是栅边缘的位置
+$x=\pm L_g/2$ 可以直接读出，无须再做坐标平移。
+
+\begin{equation}
+N_{\text{node}} \;=\; n_x\,N_z,
+\qquad
+N_{\text{cell}} \;=\; n_x\,(N_z-1).
+\label{eq:mesh-size}
+\end{equation}
+
+\section{构造算法与网格度量}
+\label{sec:mesh-algorithm}
+\index{2qty@物理量!node spacing@节点间距}
+
+\subsection{算法}
+
+构造过程是层表的单遍扫描：维护一个竖直游标，对每层算出 $n_l$、
+追加 $n_l$ 个节点、记录该层的节点切片与几何元数据。全局复杂度为
+$O(N_z+n_x)$，且只需线性存储。
+
+每个层条目除几何量（\akey{top_nm}、\akey{bottom_nm}、\akey{thickness_nm}、
+\akey{n_cells}、\akey{n_nodes}）之外，还记录 \akey{node_slice} =
+$[\text{start},\text{end}]$。这不是冗余信息：它使\emph{反查}成为可能 ——
+给定一个节点号即可知它属于哪一层，无须再次扫描层表。下游模块反复需要这一映射
+（例如按层取介电常数、按层取有效质量），把层结构显式写进 artifact
+比让每个消费者各自重算要可靠。
+
+\subsection{网格度量与不变量}
+
+构造结束后记录两组度量：竖直间距的极值 $\Delta z_{\min}$、$\Delta z_{\max}$
+（它们直接决定显式时间步的稳定性上界与空间截断误差的量级），以及
+\crefeq{eq:mesh-size} 的规模计数。另有两条结构性不变量，在测试中固化：
+
+\begin{itemize}[leftmargin=1.7em,itemsep=0.3em,topsep=0.35em]
+  \item \textbf{层界一定落在节点上。} 因为相邻层共享分界节点，
+        界面坐标必然等于某个 $z_j$；
+  \item \textbf{节点切片与轴自洽。} 对任意层，
+        $z_{\text{start}}=\text{top\_nm}$ 且 $z_{\text{end}}=\text{bottom\_nm}$。
+\end{itemize}
+
+\subsection{一处刻意的取舍：界面落在节点上}
+\label{sec:mesh-interface}
+\index{1concept@概念!interface placement@界面落位}
+
+第一条不变量值得单独讨论，因为它是本模块与
+\pid{physics.quantum.sp1d}（\crefchap{ch:sp1d}）之间一处\emph{有意为之的
+不一致}，且其后果是可测量的。
+
+\crefchap{ch:sp1d} 的薛定谔--泊松求解器\emph{拒绝}把异质界面放在节点上：
+它专门构造网格使界面落在单元之间的\emph{面}上，从而让导带带阶、介电跃变、
+有效质量跃变与极化面电荷四件事同时落在单元边界，恢复二阶收敛
+（实测 $p\approx2.08$，见 \crefchap{ch:sp1d}）。本模块则相反，界面落在节点上。
+
+这不是疏忽，而是接口边界的取舍：本模块产出的是\emph{几何}，
+供\crefchap{ch:transport_dd} 的有限体积漂移扩散使用；后者按设计
+（设计稿 §3）\emph{原样消费}给定的网格，因此界面只能在节点上，
+材料跃变在界面附近被一个单元宽度的平均所抹平。
+
+抹平的后果是量化的，不是定性的：\crefchap{ch:transport_dd} 实测，
+由该网格解出的二维电子气面密度比极化给出的上界
+$\sigeff/q$ 高约 $1.7$ 倍。这一偏差在设计稿中已被预见，在
+\crefchap{ch:transport_dd} 中首次被定量。对只依赖几何的下游用途
+（接触定位、接入区电阻）它没有影响；对界面敏感的带边对齐则是硬伤。
+
+\section{验证与基准}
+\label{sec:mesh-verification}
+
+本模块的验证是\emph{结构性的}：断言网格的拓扑与几何不变量，
+而不是断言某个坐标的魔数。所有基准在 \fpath{tests/test_plugins.py} 中固化。
+
+\begin{veriftable}{网格的结构不变量（演示器件：Al$_{0.25}$Ga$_{0.75}$N 20\,nm
+/ GaN 100\,nm / GaN 1500\,nm，$L_g=0.15$\,\U{\mu m}，\akey{nx}=41）}{tab:mesh-invariants}
+\vrow{规模自洽}{$N_{\text{node}}=n_x\,N_z$}{通过（$41\times1621=66461$）}
+\vrow{横向数组长度}{$=n_x$}{$41$}
+\vrow{竖直轴覆盖整栈}{$z_0=0$，$z_{N-1}=\sum_l t_l$}{$0\to1620$\U{nm}（精确）}
+\vrow{竖直轴严格单调}{$z_j<z_{j+1}$}{通过（无重复、无倒序）}
+\vrow{层与界面计数}{$L$ 层、$L-1$ 界面}{$3$ 层、$2$ 界面}
+\vrow{界面坐标}{等于层厚累加值}{$20.0$ 与 $120.0$\U{nm}（精确）}
+\vrow{节点切片与轴自洽}{$z_{\text{start}}=\text{top}$，$z_{\text{end}}=\text{bottom}$}{逐层通过}
+\vrow{接触次序}{$x_S<x_{gl}<x_{gr}<x_D$}{通过}
+\vrow{横向范围随栅漏间距单调}{$L_{gd}\uparrow\Rightarrow x_{\max}\uparrow$}{$1.0\to3.0$\U{\mu m} 时 $x_{\max}$ 增大}
+\vnote{竖轴节点数由 \crefeq{eq:mesh-node-count} 给出：$1+20+100+1500=1621$，
+      其中各层单元数由 \crefeq{eq:mesh-ncells} 在 $h_{\text{target}}=1$\U{nm} 下取整而得。}
+\end{veriftable}
+
+\section{误差来源与适用边界}
+\label{sec:mesh-limits}
+\index{1concept@概念!validity limits@适用边界}
+
+\limitsheading
+
+\begin{bounds}
+  \item \textbf{界面被一个单元宽度抹平。} 见 \S\ref{sec:mesh-interface}。
+        可测量后果：下游二维电子气面密度比极化上界高约 $1.7$ 倍。
+
+  \item \textbf{横向均匀，无栅边缘加密。} 栅边缘的电场集中是本器件最重要的
+        二维效应之一，而均匀横向网格无法在其附近加密。模块自身的说明
+        也把栅边缘加密列为后续版本的计划。
+
+  \item \textbf{张量积几何的表达能力有限。} 倾斜台面、凹槽栅、再生长结构、
+        场板等一概无法表达。这是 \S\ref{sec:mesh-assumption} 所述取舍的另一面。
+
+  \item \textbf{$N_{\min}$ 下限可能引入过密的网格。} 当某层远薄于
+        $h_{\text{target}}$ 时，\crefeq{eq:mesh-ncells} 的下限会把它撑到
+        $N_{\min}$ 格，使该层的实际间距远小于目标值。局部过密只影响效率，
+        但会让 $\Delta z_{\min}$ 与 $\Delta z_{\max}$ 相差很大，
+        在按 $\Delta z$ 做稳定性估计的下游算法中需要留意。
+
+  \item \textbf{只覆盖外延栈。} 竖直轴止于层表最后一层的底面，
+        衬底未建模，也没有背面接触。因此本网格不适用于自热或衬底耦合分析。
+
+  \item \textbf{\akey{fingers} 只是元数据。} 多指器件的版图字段被读入并记录，
+        但未参与几何构造：本模块只生成\emph{单指}截面。
+        把指数与栅宽折算成总栅宽的工作属于提取阶段，不属于网格阶段。
+
+  \item \textbf{掺杂只随层记录，不引起网格加密。} 缓冲层的受主掺杂
+        （演示器件中 $1\times10^{17}$\U{cm^{-3}}）写在层条目里，
+        但不会因此在该区域加密；对耗尽区宽度的分辨率由
+        $h_{\text{target}}$ 单独控制。
+\end{bounds}
+
+\section{接口契约与小结}
+\label{sec:mesh-interface-contract}
+\index{5artifact@数据通道!structure}\index{5artifact@数据通道!mesh}
+
+本模块读取一个 artifact、写出一个：
+
+{\small
+\begin{longtable}{@{}p{0.06\textwidth} p{0.22\textwidth} p{0.62\textwidth}@{}}
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{方向} & \textbf{键} & \textbf{本模块使用/提供的字段}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+入 & \akey{structure} &
+  \akey{layers[].{name, material, role, thickness_nm, x_al, doping_cm3, doping_kind}},
+  \akey{gate.length_um}, \akey{geometry.{source_gate_spacing_um, gate_drain_spacing_um}}\\
+出 & \akey{mesh} &
+  \akey{kind}, \akey{nx}, \akey{nz}, \akey{n_nodes}, \akey{n_cells},
+  \akey{x_nm[]}, \akey{z_nm[]}, \akey{layers[]}（含 \akey{node_slice}）,
+  \akey{interfaces_nm[]}, \akey{total_depth_nm}, \akey{lateral_extent_nm},
+  \akey{vertical_spacing_nm.{min,max}}, \akey{contacts_nm.*}\\
+\end{longtable}
+}
+
+\noindent
+产出物是一个\emph{普通字典}，下游模块无须依赖任何网格库即可消费它。
+这是刻意的：网格是流水线上第一个"共享事实"，把它做成惰性数据而非
+活对象，可以使任何模块（包括第三方插件）在不引入依赖的前提下读取几何。
+
+\subsection*{小结}
+
+本章的结论可以概括为三点。
+
+其一，\textbf{结构化网格不是一个偷懒的选择，而是一次架构级的取舍}。
+它换来的是块三对角 Jacobian 与 $O(n_zm^{3})$ 的线性步，代价是几何表达能力。
+
+其二，\textbf{网格产出的不只是坐标，还有\emph{可反查的结构}}。
+层条目携带节点切片，使"某节点属于哪一层"成为 $O(1)$ 查询；
+这让下游不必各自重新解释层表。
+
+其三，\textbf{界面落位是模块间接口的产物，不是局部最优}。
+本模块把界面放在节点上，与 \crefchap{ch:sp1d} 的面基界面相反；
+两者都对各自的求解器是恰当的，而它们之间的失配有一个已被量化的后果
+（\crefchap{ch:transport_dd} 中的 $1.7$ 倍面密度偏差）。
+
+\cleardoublepage
