@@ -1,8 +1,14 @@
 # Huntian
 
+[![CI](https://github.com/quantom-0/huntian/actions/workflows/ci.yml/badge.svg)](https://github.com/quantom-0/huntian/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
 > 面向 GaN 射频 HEMT 的**轻量化、模块化 TCAD** 内核。
 > 当前状态：**P0 骨架**（注册中心 + SimContext + Deck schema）+ **P1 全部完成**（自洽 Schrödinger–Poisson 求解器 + Newton 耦合求解器 + 严格精确 Jacobian）+ **材料验证第一阶段**（`materials.dft` · `table` 后端：文献 DFT 查找表 + 覆盖审计）+ **漂移扩散输运**（`transport.dd`）。
 > 待实现的设计稿：`materials.dft` 的 `qe_*` 后端、`transport.dd` 的高偏压收敛 —— 见 §11 设计文档索引；进度与欠账见 `工作日志.md`。
+
+主站 [GitHub](https://github.com/quantom-0/huntian) ｜ 国内镜像 [Gitee](https://gitee.com/ding-yichong/huntian)
 
 ---
 
