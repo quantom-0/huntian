@@ -3,8 +3,13 @@
 
     python run_tests.py
 
-No installation and no third-party dependency is required: the core package is
-standard library only, and the suite uses :mod:`unittest`.
+No installation is required: the core package is standard library only and the
+suite uses :mod:`unittest`.
+
+NumPy IS required to run the full suite. Four bundled plugins
+(``physics.quantum.sp1d``, ``nonlinear.newton``, ``linear.blocktridiag`` and
+``transport.dd``) import it at module level, so without NumPy plugin discovery
+fails and those tests surface as errors rather than skips.
 """
 
 from __future__ import annotations

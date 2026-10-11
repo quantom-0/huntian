@@ -10,9 +10,21 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-keywords = ["tcad", "gan", "hemt", "rf", "device-modeling", "plugin"]
+authors = [{ name = "quantom-0" }]
+keywords = [
+  "tcad", "gan", "hemt", "rf", "device-modeling", "plugin",
+  "drift-diffusion", "schrodinger-poisson", "semiconductor",
+]
 classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
   "Topic :: Scientific/Engineering :: Physics",
 ]
@@ -20,13 +32,20 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-# The self-consistent Schroedinger-Poisson plugin needs NumPy. The core, and
-# every other bundled plugin, does not.
+# NumPy is required by four bundled plugins and their tests:
+# physics.quantum.sp1d, nonlinear.newton, linear.blocktridiag and
+# transport.dd. The core package itself -- and every other bundled plugin --
+# is standard library only.
 sp1d = ["numpy>=1.24"]
 # YAML Deck support. JSON works everywhere; YAML is a convenience.
 yaml = ["PyYAML>=6.0"]
 # Development extras. The bundled suite runs on stdlib unittest alone.
 dev = ["pytest>=7.0"]
+
+[project.urls]
+Homepage = "https://github.com/quantom-0/huntian"
+Repository = "https://github.com/quantom-0/huntian"
+Issues = "https://github.com/quantom-0/huntian/issues"
 
 [project.scripts]
 huntian = "huntian.cli:main"

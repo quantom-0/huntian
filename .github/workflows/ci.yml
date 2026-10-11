@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The project once lost 208 lines / 540 characters from README.md to a
+  # GBK round-trip through a shell. This job makes that damage class
+  # impossible to merge unnoticed.
+  encoding:
+    name: encoding guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Every tracked file must be clean UTF-8
+        run: python tools/check_encoding.py
+
+  # The core package is standard library only, but four bundled plugins and
+  # their tests import NumPy at module level. Without it plugin discovery
+  # fails and the suite reports errors rather than skips, so NumPy is
+  # installed explicitly here.
+  suite:
+    name: suite · ${{ matrix.os }} · py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install NumPy
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "numpy>=1.24"
+
+      - name: Run the bundled suite (no installation required)
+        run: python run_tests.py
+
+      - name: End-to-end demo
+        run: python demo.py
+
+  # Exercises what the suite above does not: the real installed package, the
+  # optional extras, the pytest entry point, and the YAML Deck path.
+  packaging:
+    name: packaging · editable install + optional extras
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install with every optional extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[sp1d,yaml,dev]"
+
+      - name: Run the suite through pytest
+        run: python -m pytest -q
+
+      - name: Exercise the YAML Deck path
+        run: |
+          python -m huntian.cli validate decks/demo_hemt.yaml --plugin-dir plugins
+          python -m huntian.cli run decks/demo_hemt.yaml --plugin-dir plugins --show ns
+
+      - name: Console script is on PATH
+        run: huntian list-plugins --plugin-dir plugins

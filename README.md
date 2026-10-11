@@ -24,7 +24,7 @@
 
 ## 2. 快速开始
 
-不需要安装任何东西，用系统 Python 3.10+ 即可（SP / 输运插件需要 numpy）：
+不需要安装任何东西，用系统 Python 3.10+ 即可。但**全量测试套件需要 numpy**：`physics.quantum.sp1d`、`nonlinear.newton`、`linear.blocktridiag`、`transport.dd` 四个插件在导入期就依赖它，缺了会产生 error 而非 skip（实测只剩 152 个用例被发现）。
 
 ```powershell
 # 跑测试（426 个用例，纯 unittest）
@@ -342,6 +342,7 @@ MODULE = MyMobility
 - **线性步仍是稠密的**（`nonlinear.newton` 用 `np.linalg.solve`）：它自己装不下 2 万节点的 DD。DD 因此**不走**这个服务，而是经 Deck 的 `linear` 槽解析 `linear.blocktridiag`（纯 numpy 块三对角直接解，O(nz·m³)）。把 `nonlinear.newton` 也迁到 `linear` 槽上仍是 `工作日志.md` §6-7 的欠账。
 - **Anderson 回退比 Newton 脆弱**：它更慢，而且在某些网格上会因密度钳制而卡住。默认算法是 Newton。
 - **材料常数未经 L2 独立验证**：`huntian/data/materials.json` 的数值转录自 Ambacher 2000/2002 与 Vurgaftman 2003，标记 `unverified`。`materials.dft`（`table` 后端）现已提供一个**带不确定度与完整溯源**的文献 DFT 覆盖通道（`data/dft_lookup/algan_gan.json` + `dft_provenance` 审计），但它是有意声明的 **0 K、理想晶体、文献转录**先验 —— 跑通 L2 基准（Hall 对比）之前**不要相信绝对数值**。
+- **`materials.dft` 的默认表路径是相对当前工作目录的**：`table_path` 默认 `data/dft_lookup/algan_gan.json`。在仓库根运行时正常，从别处运行（例如 `pip install` 之后）会报 `ModuleConfigError: lookup table not found` —— 已实测确认。再者 `plugins/` 不在 `python/` 包内，安装后不随发行版分发，该查找表也不在任何 wheel / sdist 里。**PyPI 发布前必须一并解决**（改用 `importlib.resources` 定位，或让表随插件目录一起分发）。
 - **屏蔽因子（screening）没有公认取值**，默认 0.8 只是起点，必须用 Hall 数据标定。
 - **有效质量近似**，忽略非抛物性、应变对质量的修正。
 - **势垒以上的态是有限域的盒子本征态，不是真正的束缚态**。它们是 3D 连续态的合法求积（面密度对域尺寸不敏感于 1e-5 以内），但**单个**波函数不是物理的。
@@ -408,9 +409,19 @@ Huntian/
 │   ├── demo_hemt_dft.json        同一器件：materials.dft 替换材料槽（一行绑定）
 │   └── demo_hemt.yaml            YAML 示例
 ├── tests/                        426 个用例（含 golden/dft_benchmarks_d0_d3.json 对照）
+├── docs/tex/                     模块化技术文档（LaTeX 源，一个插件一章）
+│   └── build/                    构建产物（PDF 与中间文件，不入库）
+├── tools/check_encoding.py       编码守卫：合法 UTF-8 / 无 BOM / 无 U+FFFD / 无孤立 CR
 ├── demo.py                       端到端演示
-├── run_tests.py                  测试入口（无需安装）
-└── pyproject.toml
+├── run_tests.py                  测试入口（无需安装；**全量套件需要 numpy**）
+├── pyproject.toml                打包与元数据
+├── README.md                     本文件（现状）
+├── 工作日志.md                   每阶段做了什么、为什么、欠账、教训、版本历史
+├── CONTRIBUTING.md               贡献指南（项目特有约定）
+├── CODE_OF_CONDUCT.md            Contributor Covenant 2.1
+├── LICENSE                       MIT
+├── .github/                      CI 工作流 + issue / PR 模板
+└── 命名*.md                      改名决策的证据链（三份，见 §11）
 ```
 
 ---

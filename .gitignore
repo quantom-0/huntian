@@ -18,3 +18,26 @@ htmlcov/
 # Run outputs (metadata snapshots are reproducible, so they are not tracked)
 out/
 *.log
+
+# Editors / OS cruft
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# LaTeX intermediates. The normal build directory is already ignored by the
+# 'build/' rule above; these catch strays if something is built elsewhere.
+*.aux
+*.bbl
+*.blg
+*.idx
+*.ind
+*.ilg
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.bcf
+*.run.xml
