@@ -297,7 +297,7 @@ class Requirement:
         else:
             module_id, spec = raw[: match.start()].strip(), raw[match.start() :].strip()
             if not module_id:
-                # e.g. ">=1.0" with no module id, or a typo like "nemo>="
+                # e.g. ">=1.0" with no module id, or a typo like "huntian>="
                 raise RequirementError(f"requirement {text!r} is missing a module id")
         if not module_id:
             raise RequirementError(f"requirement {text!r} is missing a module id")

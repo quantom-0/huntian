@@ -1,4 +1,4 @@
-"""Module registry: the plug-and-play heart of NemoTCAD.
+"""Module registry: the plug-and-play heart of Huntian.
 
 Everything that can be replaced - physics models, solvers, compute backends,
 EM adapters, AI helpers - is a *module* implementing :class:`IModule` and
@@ -49,7 +49,7 @@ from .errors import (
     ModuleConfigError,
     ModuleLifecycleError,
     ModuleUnavailableError,
-    NemoError,
+    HuntianError,
     RegistryError,
     RequirementError,
     VersionConflictError,
@@ -77,7 +77,7 @@ __all__ = [
     "discover_plugin_classes",
 ]
 
-LOGGER_NAME = "nemo"
+LOGGER_NAME = "huntian"
 
 VERIFICATION_LEVELS = ("verified", "partially-verified", "unverified")
 
@@ -115,7 +115,7 @@ class ModuleCategory(str, Enum):
 
 @dataclass(frozen=True, eq=False)
 class ParamSpec(Field):
-    """A module parameter: a :class:`~nemo.schema.Field` plus provenance.
+    """A module parameter: a :class:`~huntian.schema.Field` plus provenance.
 
     ``calibratable`` marks parameters that may be freed by the automatic
     fitting loop. Everything else is treated as fixed structure, which keeps
@@ -679,8 +679,8 @@ def _ensure_namespace_package(dotted_name: str) -> None:
     """Register a synthetic namespace package so plugin-relative imports work.
 
     A plugin package is loaded under a synthetic name such as
-    ``nemo_plugins.<dirname>_<index>``. For ``from .solver import x`` inside
-    that package to resolve, its parent (``nemo_plugins``) must exist in
+    ``huntian_plugins.<dirname>_<index>``. For ``from .solver import x`` inside
+    that package to resolve, its parent (``huntian_plugins``) must exist in
     ``sys.modules`` with a ``__path__``. A real importable package wins if one
     is already present.
     """
@@ -749,7 +749,7 @@ def _plugin_class_from_module(module: types.ModuleType, origin: str) -> type[IMo
 def discover_plugin_classes(
     paths: Iterable[str | Path],
     *,
-    import_prefix: str = "nemo_plugins",
+    import_prefix: str = "huntian_plugins",
 ) -> tuple[list[tuple[type[IModule], str]], list[tuple[str, str]]]:
     """Import every plugin under ``paths``.
 
@@ -893,7 +893,7 @@ class ModuleRegistry:
         for module_cls, origin in found:
             try:
                 report.loaded.append(self.register(module_cls, origin=origin))
-            except NemoError as exc:
+            except HuntianError as exc:
                 report.errors.append((origin, str(exc)))
                 self._discovery_errors.append((origin, str(exc)))
         return report

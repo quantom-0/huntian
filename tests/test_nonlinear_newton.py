@@ -11,8 +11,8 @@ import unittest
 
 import numpy as np
 
-from nemo.errors import ModuleConfigError
-from nemo.registry import ModuleState
+from huntian.errors import ModuleConfigError
+from huntian.registry import ModuleState
 
 from .helpers import build_registry, load_newton_solver
 

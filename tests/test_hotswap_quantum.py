@@ -17,8 +17,8 @@ from __future__ import annotations
 import json
 import unittest
 
-from nemo import Executor, Pipeline, SimContext, load_deck
-from nemo.deck import SLOT_CAPABILITY, Deck
+from huntian import Executor, Pipeline, SimContext, load_deck
+from huntian.deck import SLOT_CAPABILITY, Deck
 
 from . import DECK_PATH, DECK_SP1D_PATH
 from .helpers import build_registry, builtin_materials

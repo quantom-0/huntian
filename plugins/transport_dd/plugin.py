@@ -40,7 +40,7 @@ from typing import Any
 
 import numpy as np
 
-from nemo.errors import Issue
+from huntian.errors import Issue
 
 __all__ = ["validate", "execute"]
 
@@ -86,7 +86,7 @@ def validate(module: Any, ctx: Any) -> list[Issue]:
                 "params.linear_solver",
                 "transport.dd needs a service registry to resolve its linear step",
                 "service",
-                hint="run through nemo.pipeline.Executor",
+                hint="run through huntian.pipeline.Executor",
             )
         )
     elif not services.has(solver):

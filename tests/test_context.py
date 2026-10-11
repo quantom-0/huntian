@@ -7,10 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nemo.context import SimContext
-from nemo.errors import ArtifactMissingError, ContextError
-from nemo.events import EventBus
-from nemo.materials import MaterialDB
+from huntian.context import SimContext
+from huntian.errors import ArtifactMissingError, ContextError
+from huntian.events import EventBus
+from huntian.materials import MaterialDB
 
 
 class ArtifactTests(unittest.TestCase):

@@ -48,8 +48,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from nemo.errors import Issue
-from nemo.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
+from huntian.errors import Issue
+from huntian.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
 
 MANIFEST = ModuleManifest(
     module_id="transport.dd",
@@ -67,7 +67,7 @@ MANIFEST = ModuleManifest(
     requires=("mesh", "structure", "materials", "polarization"),
     produces=("electrostatics", "carriers", "current", "iv"),
     verification="partially-verified",
-    author="NemoTCAD",
+    author="Huntian",
     tags=("transport", "drift-diffusion", "newton", "iv", "hemt"),
     parameters=(
         # ---- bias sweep --------------------------------------------------

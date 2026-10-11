@@ -11,7 +11,7 @@ implements each physical role*. It is deliberately declarative so that:
 Two-stage validation is used throughout:
 
 1. **structural** - types, ranges, required fields, cross-field rules. Runs on
-   construction and raises :class:`~nemo.errors.SchemaError`.
+   construction and raises :class:`~huntian.errors.SchemaError`.
 2. **contextual** - does the plugin exist, is the version satisfiable, are the
    parameters known to that plugin, do the material names resolve. Runs on
    demand and *returns* issues so a repair loop can consume them.
@@ -412,7 +412,7 @@ class RunSpec(Schema):
 class Deck(Schema):
     """The complete description of a simulation campaign."""
 
-    __title__ = "NemoTCAD Deck"
+    __title__ = "Huntian Deck"
 
     schema_version = Str(
         SCHEMA_VERSION,

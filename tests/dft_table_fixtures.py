@@ -35,12 +35,12 @@ MINIMAL_TABLE = {
 def table_io_module():
     """Import the plugin's table_io however discovery loaded the package.
 
-    Plugins load under synthetic names (``nemo_plugins.materials_dft_<i>``),
+    Plugins load under synthetic names (``huntian_plugins.materials_dft_<i>``),
     so a plain ``import`` cannot reach them; find the live package in
     ``sys.modules`` and import its sibling from there.
     """
     for name in sorted(sys.modules):
-        if name.startswith("nemo_plugins.materials_dft_"):
+        if name.startswith("huntian_plugins.materials_dft_"):
             package = sys.modules[name]
             if hasattr(package, "__path__"):
                 return importlib.import_module(f"{name}.table_io")

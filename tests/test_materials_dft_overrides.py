@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nemo import MaterialDB, SimContext
+from huntian import MaterialDB, SimContext
 
 from . import ROOT
 from .dft_table_fixtures import MINIMAL_TABLE

@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from nemo.errors import Issue
-from nemo.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
+from huntian.errors import Issue
+from huntian.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
 
 ELEMENTARY_CHARGE = 1.602176634e-19  # C
 VACUUM_PERMITTIVITY = 8.8541878128e-12  # F/m
@@ -35,7 +35,7 @@ MANIFEST = ModuleManifest(
     requires=("ns", "quantum", "polarization"),
     produces=("results.fom",),
     verification="unverified",
-    author="NemoTCAD",
+    author="Huntian",
     tags=("extract", "fom"),
     parameters=(
         ParamSpec.float(

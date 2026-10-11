@@ -2,7 +2,7 @@
 
 Why not ``pydantic``?
 ---------------------
-The core of NemoTCAD is deliberately importable on a bare Python install, so
+The core of Huntian is deliberately importable on a bare Python install, so
 this module provides the subset of pydantic behaviour the project actually
 needs:
 
@@ -10,7 +10,7 @@ needs:
 * **strict unknown-field rejection** (the primary safety gate for
   LLM-generated Decks and module parameters),
 * nested schemas and lists of schemas,
-* structured :class:`~nemo.errors.Issue` reporting with dotted paths,
+* structured :class:`~huntian.errors.Issue` reporting with dotted paths,
 * JSON Schema emission, which is what the LLM layer is fed with.
 
 Behaviour is intentionally pydantic-compatible in spirit, so a later swap to
@@ -28,7 +28,7 @@ Quick example
 >>> GateSpec.from_dict({"lenght_um": 0.25})
 Traceback (most recent call last):
     ...
-nemo.errors.SchemaError: schema validation failed...
+huntian.errors.SchemaError: schema validation failed...
 """
 
 from __future__ import annotations

@@ -21,7 +21,7 @@ never silently used.
 
 from __future__ import annotations
 
-from nemo.registry import ModuleCategory, ModuleManifest, ParamSpec
+from huntian.registry import ModuleCategory, ModuleManifest, ParamSpec
 
 from .plugin import DftMaterials
 
@@ -39,7 +39,7 @@ MANIFEST = ModuleManifest(
     requires=("structure",),
     produces=("materials", "dft_provenance"),
     verification="partially-verified",
-    author="NemoTCAD",
+    author="Huntian",
     tags=("dft", "first-principles", "materials", "validation"),
     parameters=(
         # ---- run mode ---------------------------------------------------

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from nemo.deck import Deck, load_deck
+from huntian.deck import Deck, load_deck
 
 from . import DECK_PATH
 from .helpers import build_registry, run_deck

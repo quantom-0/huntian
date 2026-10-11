@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run the NemoTCAD test suite from a clean checkout.
+"""Run the Huntian test suite from a clean checkout.
 
     python run_tests.py
 

@@ -1,7 +1,7 @@
 # 漂移扩散输运模块（transport.dd）—— 插件设计
 
 > 版本：v0.1.2（设计稿 + 落地偏差记录，见 §12；§12 为落地后补写，§1–§11 保持设计原样）
-> 定位：NemoTCAD 插件 `transport.dd`，把当前的**平衡态**求解扩展为**带偏压**的 2D 漂移扩散求解，产出 IV 特性
+> 定位：Huntian 插件 `transport.dd`，把当前的**平衡态**求解扩展为**带偏压**的 2D 漂移扩散求解，产出 IV 特性
 > 路线图：README §10 下一步**第 2 项**（⏳ 待实现）；两项前置均已完成 —— `nonlinear.newton` 服务已落地（v1.0.0），SP 耦合的一阶收敛问题已由面基界面解决（竖直网格收敛阶 p ≈ 2.08）
 > 架构前提：沿用 sp1d 验证过的模式 —— **只加插件目录，核心一行不改**
 
@@ -69,7 +69,7 @@ J_n = q n μ(E) ∇ψ + q D_n ∇n,  D_n = μ kT/q·(degeneracy correction)
 
 ## 4. Manifest 定义（落地代码草稿）
 
-与 `nemo/registry.py` 实际签名一致。
+与 `huntian/registry.py` 实际签名一致。
 
 ```python
 MANIFEST = ModuleManifest(
@@ -86,7 +86,7 @@ MANIFEST = ModuleManifest(
     requires=("mesh", "structure", "materials", "polarization"),
     produces=("electrostatics", "carriers", "current", "iv"),
     verification="unverified",
-    author="NemoTCAD",
+    author="Huntian",
     tags=("transport", "drift-diffusion", "newton", "iv"),
     parameters=(
         # ---- 偏置扫描 ---------------------------------------------------

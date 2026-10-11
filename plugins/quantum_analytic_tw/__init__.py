@@ -24,8 +24,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from nemo.errors import Issue
-from nemo.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
+from huntian.errors import Issue
+from huntian.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
 
 ELEMENTARY_CHARGE = 1.602176634e-19  # C
 VACUUM_PERMITTIVITY = 8.8541878128e-12  # F/m
@@ -46,7 +46,7 @@ MANIFEST = ModuleManifest(
     requires=("polarization",),
     produces=("quantum", "ns"),
     verification="partially-verified",
-    author="NemoTCAD",
+    author="Huntian",
     tags=("quantum", "2deg", "charge-control"),
     parameters=(
         ParamSpec.choice(

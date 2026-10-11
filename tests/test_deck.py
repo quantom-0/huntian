@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nemo.deck import (
+from huntian.deck import (
     SLOT_ORDER,
     Deck,
     deck_json_schema,
@@ -16,8 +16,8 @@ from nemo.deck import (
     loads_deck,
     yaml_available,
 )
-from nemo.errors import DeckError, SchemaError
-from nemo.materials import MaterialDB
+from huntian.errors import DeckError, SchemaError
+from huntian.materials import MaterialDB
 
 from . import DECK_PATH
 from .helpers import build_registry
@@ -73,7 +73,7 @@ class DeckLoadTests(unittest.TestCase):
 
     def test_json_schema_shape(self) -> None:
         schema = deck_json_schema()
-        self.assertEqual(schema["title"], "NemoTCAD Deck")
+        self.assertEqual(schema["title"], "Huntian Deck")
         for key in ("name", "device", "physics", "modules", "simulation"):
             self.assertIn(key, schema["properties"])
         self.assertIn("name", schema["required"])

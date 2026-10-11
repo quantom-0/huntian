@@ -27,8 +27,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from nemo.errors import Issue
-from nemo.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
+from huntian.errors import Issue
+from huntian.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
 
 from .solver import ELECTRON_MASS, build_grid, solve_schrodinger_poisson
 
@@ -47,7 +47,7 @@ MANIFEST = ModuleManifest(
     requires=("polarization", "materials"),
     produces=("quantum", "ns"),
     verification="partially-verified",
-    author="NemoTCAD",
+    author="Huntian",
     tags=("quantum", "2deg", "self-consistent", "schrodinger-poisson", "newton"),
     parameters=(
         # ---- algorithm ---------------------------------------------------
@@ -331,7 +331,7 @@ class SchrodingerPoisson1D(BaseModule):
                         "algorithm='newton' needs a service registry, but this "
                         "context has none",
                         "service",
-                        hint="run through nemo.pipeline.Executor",
+                        hint="run through huntian.pipeline.Executor",
                     )
                 )
             elif not services.has(str(self.param("nonlinear_solver"))):

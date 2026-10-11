@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""End-to-end walkthrough of the NemoTCAD skeleton.
+"""End-to-end walkthrough of the Huntian skeleton.
 
     python demo.py
 
@@ -30,7 +30,7 @@ for _entry in (str(ROOT / "python"), str(ROOT)):
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
 
-from nemo import (  # noqa: E402
+from huntian import (  # noqa: E402
     Deck,
     Executor,
     MaterialDB,
@@ -77,7 +77,7 @@ def print_stages(result) -> None:
 
 def main() -> int:
     # ------------------------------------------------------------------
-    banner("NemoTCAD: registry + context + deck schema + pluggable physics")
+    banner("Huntian: registry + context + deck schema + pluggable physics")
 
     sub("1. Plugin discovery")
     registry = ModuleRegistry()
@@ -403,7 +403,7 @@ def main() -> int:
 
     banner("Done")
     print("  Test suite : python run_tests.py")
-    print("  CLI        : python -m nemo.cli --help   (needs PYTHONPATH=python)")
+    print("  CLI        : python -m huntian.cli --help   (needs PYTHONPATH=python)")
     return 0
 
 

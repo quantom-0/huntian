@@ -15,8 +15,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nemo import MaterialDB, SimContext
-from nemo.errors import ModuleConfigError
+from huntian import MaterialDB, SimContext
+from huntian.errors import ModuleConfigError
 
 from . import ROOT
 from .dft_table_fixtures import MINIMAL_TABLE
@@ -70,7 +70,7 @@ class ManifestTests(unittest.TestCase):
         # subprocess so other tests that *do* touch qe_driver cannot leak.
         code = (
             "import sys; sys.path.insert(0, 'python')"
-            "; from nemo.registry import discover_plugin_classes"
+            "; from huntian.registry import discover_plugin_classes"
             "; discover_plugin_classes(['plugins/materials_dft'])"
             "; leaked=[m for m in sys.modules if 'qe_driver' in m"
             " or 'slurm' in m or m == 'ase']"

@@ -511,7 +511,7 @@ simulation:
 ## 13. 代码仓库目录结构
 
 ```
-NemoTCAD/
+Huntian/
 ├── core/                       # C++ 内核（Kokkos）
 │   ├── mesh/                   # 结构化网格
 │   ├── discretize/             # FV + Schafetter-Gummel
@@ -519,7 +519,7 @@ NemoTCAD/
 │   ├── solve/                  # Newton + 线性求解器
 │   └── bind/                   # pybind11 绑定
 ├── python/                     # Python 编排层
-│   ├── nemo/
+│   ├── huntian/
 │   │   ├── registry/           # 模块注册中心 + 接口定义
 │   │   ├── context/            # SimContext
 │   │   ├── deck/               # DSL parser + schema 校验

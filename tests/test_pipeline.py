@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import unittest
 
-from nemo import Executor, MaterialDB, ModuleRegistry, Pipeline, SimContext, Stage
-from nemo.deck import Deck, load_deck
-from nemo.registry import BaseModule, ModuleCategory, ModuleManifest
+from huntian import Executor, MaterialDB, ModuleRegistry, Pipeline, SimContext, Stage
+from huntian.deck import Deck, load_deck
+from huntian.registry import BaseModule, ModuleCategory, ModuleManifest
 
 from . import DECK_PATH
 from .helpers import build_registry, builtin_materials

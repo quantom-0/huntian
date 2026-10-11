@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nemotcad"
+name = "huntian"
 version = "0.1.0"
 description = "Lightweight, modular TCAD core for GaN RF HEMTs"
 readme = "README.md"
@@ -29,7 +29,7 @@ yaml = ["PyYAML>=6.0"]
 dev = ["pytest>=7.0"]
 
 [project.scripts]
-nemo = "nemo.cli:main"
+huntian = "huntian.cli:main"
 
 [tool.setuptools]
 package-dir = { "" = "python" }
@@ -38,7 +38,7 @@ package-dir = { "" = "python" }
 where = ["python"]
 
 [tool.setuptools.package-data]
-nemo = ["data/*.json"]
+huntian = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

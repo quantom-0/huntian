@@ -14,8 +14,8 @@ import unittest
 
 import numpy as np
 
-from nemo import ModuleRegistry
-from nemo.services import ServiceRegistry
+from huntian import ModuleRegistry
+from huntian.services import ServiceRegistry
 
 from . import PLUGIN_DIR
 from .helpers import build_registry
@@ -25,7 +25,7 @@ LINEAR_SOLVER_PATH = PLUGIN_DIR / "linear_blocktridiag" / "solver.py"
 
 def load_linear_solver():
     """Import the numerics straight from the file, as the other kernels do."""
-    name = "nemo_tests_linear_blocktridiag"
+    name = "huntian_tests_linear_blocktridiag"
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, LINEAR_SOLVER_PATH)

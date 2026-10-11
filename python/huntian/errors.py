@@ -1,7 +1,7 @@
-"""Exception hierarchy for NemoTCAD.
+"""Exception hierarchy for Huntian.
 
-Every error raised by the package derives from :class:`NemoError`, so a caller
-can catch the whole family with a single ``except NemoError``.
+Every error raised by the package derives from :class:`HuntianError`, so a caller
+can catch the whole family with a single ``except HuntianError``.
 
 Validation problems are reported as structured :class:`Issue` records carrying
 a dotted *path* (``device.structure.layers[1].thickness_nm``), which is what
@@ -16,7 +16,7 @@ from typing import Iterable
 __all__ = [
     "Issue",
     "format_issues",
-    "NemoError",
+    "HuntianError",
     "SchemaError",
     "DeckError",
     "VersionError",
@@ -55,11 +55,11 @@ def format_issues(issues: Iterable[Issue], *, indent: str = "  ") -> str:
     return "\n".join(rendered) if rendered else f"{indent}(no issues)"
 
 
-class NemoError(Exception):
-    """Base class for every error raised by NemoTCAD."""
+class HuntianError(Exception):
+    """Base class for every error raised by Huntian."""
 
 
-class SchemaError(NemoError):
+class SchemaError(HuntianError):
     """One or more fields failed structural or semantic validation."""
 
     def __init__(self, issues: Iterable[Issue], *, where: str | None = None) -> None:
@@ -69,19 +69,19 @@ class SchemaError(NemoError):
         super().__init__(f"{header}:\n{format_issues(self.issues)}")
 
 
-class DeckError(NemoError):
+class DeckError(HuntianError):
     """A Deck document could not be read, parsed or resolved."""
 
 
-class VersionError(NemoError):
+class VersionError(HuntianError):
     """A version string could not be parsed."""
 
 
-class RequirementError(NemoError):
+class RequirementError(HuntianError):
     """A module requirement string could not be parsed."""
 
 
-class RegistryError(NemoError):
+class RegistryError(HuntianError):
     """Base class for module registry failures."""
 
 
@@ -101,7 +101,7 @@ class DuplicateModuleError(RegistryError):
     """A module id/version pair is already registered."""
 
 
-class ModuleConfigError(NemoError):
+class ModuleConfigError(HuntianError):
     """Module parameters are missing, unknown or out of range."""
 
 
@@ -109,11 +109,11 @@ class ServiceUnavailableError(RegistryError):
     """A collaborator service could not be resolved for a stage."""
 
 
-class ModuleLifecycleError(NemoError):
+class ModuleLifecycleError(HuntianError):
     """A module method was called in an invalid lifecycle state."""
 
 
-class ContextError(NemoError):
+class ContextError(HuntianError):
     """Base class for simulation-context failures."""
 
 
@@ -121,5 +121,5 @@ class ArtifactMissingError(ContextError):
     """A required artifact is not present in the simulation context."""
 
 
-class PipelineError(NemoError):
+class PipelineError(HuntianError):
     """A pipeline stage failed."""

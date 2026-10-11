@@ -6,7 +6,7 @@ import importlib.util
 import sys
 from typing import Any
 
-from nemo import Deck, Executor, MaterialDB, ModuleRegistry, Pipeline, SimContext
+from huntian import Deck, Executor, MaterialDB, ModuleRegistry, Pipeline, SimContext
 
 from . import PLUGIN_DIR
 
@@ -76,12 +76,12 @@ def load_sp_solver() -> Any:
     as standalone numerics as well as through the plugin package. Loading it
     this way also proves that property.
     """
-    return _load_by_path("nemo_tests_sp1d_solver", SP_SOLVER_PATH)
+    return _load_by_path("huntian_tests_sp1d_solver", SP_SOLVER_PATH)
 
 
 def load_newton_solver() -> Any:
     """Import the generic Newton numerics directly from their file."""
-    return _load_by_path("nemo_tests_newton_solver", NEWTON_SOLVER_PATH)
+    return _load_by_path("huntian_tests_newton_solver", NEWTON_SOLVER_PATH)
 
 
 class NewtonSolverStub:

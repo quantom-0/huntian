@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from nemo.errors import Issue
-from nemo.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
+from huntian.errors import Issue
+from huntian.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
 
 MANIFEST = ModuleManifest(
     module_id="mesh.structured2d",
@@ -24,7 +24,7 @@ MANIFEST = ModuleManifest(
     requires=("structure",),
     produces=("mesh",),
     verification="partially-verified",
-    author="NemoTCAD",
+    author="Huntian",
     tags=("mesh", "structured"),
     parameters=(
         ParamSpec.integer(

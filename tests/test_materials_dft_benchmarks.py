@@ -19,7 +19,7 @@ import math
 import unittest
 from pathlib import Path
 
-from nemo import MaterialDB, SimContext
+from huntian import MaterialDB, SimContext
 
 from . import ROOT
 from .helpers import build_registry

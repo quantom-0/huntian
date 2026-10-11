@@ -25,9 +25,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
-from nemo.errors import Issue, ModuleConfigError
-from nemo.materials import Material, MaterialDB
-from nemo.registry import BaseModule
+from huntian.errors import Issue, ModuleConfigError
+from huntian.materials import Material, MaterialDB
+from huntian.registry import BaseModule
 
 from .table_io import (
     ATTACH_ONLY_KEYS,

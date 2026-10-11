@@ -1,4 +1,4 @@
-"""Version metadata for the NemoTCAD package."""
+"""Version metadata for the Huntian package."""
 
 from __future__ import annotations
 

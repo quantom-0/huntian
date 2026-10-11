@@ -33,7 +33,7 @@ from .events import EventBus
 
 __all__ = ["Artifact", "ProvenanceRecord", "StageScope", "SimContext"]
 
-LOGGER_NAME = "nemo"
+LOGGER_NAME = "huntian"
 
 
 def _jsonable(value: Any) -> Any:
@@ -169,7 +169,7 @@ class SimContext:
         self.materials = materials
         self.log: logging.Logger = logger or logging.getLogger(LOGGER_NAME)
         #: Collaborator modules (nonlinear/linear solvers, backends) resolved on
-        #: demand. Populated by :class:`~nemo.pipeline.Executor`; a context built
+        #: demand. Populated by :class:`~huntian.pipeline.Executor`; a context built
         #: by hand has none, which is what makes the numerics testable in isolation.
         self.services: Any = None
 
@@ -355,7 +355,7 @@ class SimContext:
         if self.services is None:
             raise ContextError(
                 "this context has no service registry; build runs through "
-                "nemo.pipeline.Executor (or assign ctx.services) so that library "
+                "huntian.pipeline.Executor (or assign ctx.services) so that library "
                 "modules can be resolved"
             )
         return self.services
@@ -379,7 +379,7 @@ class SimContext:
             "name": self.name,
             "created_at": self.created_at,
             "fingerprint": self.fingerprint(),
-            "nemo_version": _nemo_version(),
+            "huntian_version": _huntian_version(),
             "materials": (
                 None
                 if self.materials is None
@@ -438,7 +438,7 @@ class SimContext:
         )
 
 
-def _nemo_version() -> str:
+def _huntian_version() -> str:
     from .version import __version__
 
     return __version__

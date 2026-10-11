@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from .errors import NemoError
+from .errors import HuntianError
 
 __all__ = ["Material", "MaterialDB", "MaterialLookupError", "BUILTIN_MATERIALS_PATH"]
 
@@ -30,7 +30,7 @@ BUILTIN_MATERIALS_PATH = Path(__file__).resolve().parent / "data" / "materials.j
 DEFAULT_BOWING: dict[str, float] = {}
 
 
-class MaterialLookupError(NemoError):
+class MaterialLookupError(HuntianError):
     """A material or material property is not available."""
 
 

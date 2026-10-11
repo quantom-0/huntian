@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from nemo.errors import SchemaError
-from nemo.schema import (
+from huntian.errors import SchemaError
+from huntian.schema import (
     Bool,
     DictOf,
     Enum,
@@ -39,7 +39,7 @@ class CheckedSchema(Schema):
     high = Float(2.0)
 
     def check(self):
-        from nemo.errors import Issue
+        from huntian.errors import Issue
 
         if self.high <= self.low:
             return [Issue("high", "high must exceed low", "semantic")]

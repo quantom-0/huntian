@@ -1,4 +1,4 @@
-# NemoTCAD
+# Huntian
 
 > 面向 GaN 射频 HEMT 的**轻量化、模块化 TCAD** 内核。
 > 当前状态：**P0 骨架**（注册中心 + SimContext + Deck schema）+ **P1 全部完成**（自洽 Schrödinger–Poisson 求解器 + Newton 耦合求解器 + 严格精确 Jacobian）+ **材料验证第一阶段**（`materials.dft` · `table` 后端：文献 DFT 查找表 + 覆盖审计）+ **漂移扩散输运**（`transport.dd`）。
@@ -35,10 +35,10 @@ python demo.py
 
 # 命令行
 $env:PYTHONPATH = "python"
-python -m nemo.cli list-plugins --plugin-dir plugins
-python -m nemo.cli validate decks/demo_hemt.json --plugin-dir plugins
-python -m nemo.cli run decks/demo_hemt_sp1d.json --plugin-dir plugins --show ns
-python -m nemo.cli schema --what deck      # 给 LLM 用的 JSON Schema
+python -m huntian.cli list-plugins --plugin-dir plugins
+python -m huntian.cli validate decks/demo_hemt.json --plugin-dir plugins
+python -m huntian.cli run decks/demo_hemt_sp1d.json --plugin-dir plugins --show ns
+python -m huntian.cli schema --what deck      # 给 LLM 用的 JSON Schema
 ```
 
 可选：`pip install -e ".[sp1d,yaml,dev]"`。
@@ -48,7 +48,7 @@ JSON Deck 在**任何环境**都能跑，YAML 只是便利。
 
 ## 3. 已实现的能力
 
-### 3.1 模块注册中心（`nemo/registry.py`）
+### 3.1 模块注册中心（`huntian/registry.py`）
 
 - **发现**：扫描 `plugins/` 目录（支持**多文件插件包**，`__init__.py` 可用相对导入）或按点分导入路径加载；单个插件损坏**不会**中断整轮发现。
 - **契约校验**：插件的 `api_version` 主版本不匹配时拒绝加载。
@@ -57,7 +57,7 @@ JSON Deck 在**任何环境**都能跑，YAML 只是便利。
 - **参数校验**：未知参数、越界、类型错误一律拒绝 —— **LLM 生成配置的安全闸门**。
 - **热插拔**：运行中注册新版本；**已创建的实例继续使用旧版本**。
 
-### 3.2 SimContext（`nemo/context.py`）
+### 3.2 SimContext（`huntian/context.py`）
 
 模块之间**从不互相 import**，只通过命名 artifact 交换数据：
 
@@ -71,7 +71,7 @@ with ctx.stage("quantum", module_id, "1.0.0",
 
 同时提供**溯源**（模块/版本/状态/耗时/输入输出）和**可复现指纹**（参数 + 模块版本 + 材料库的稳定哈希；**故意不序列化 artifact 数值**）。
 
-### 3.3 Deck schema（`nemo/deck.py`）
+### 3.3 Deck schema（`huntian/deck.py`）
 
 两级校验，专为 LLM 闭环设计：
 
@@ -80,7 +80,7 @@ with ctx.stage("quantum", module_id, "1.0.0",
 
 第 2 步返回 issue 列表而不是抛异常 —— 这正是"**LLM 生成 → 校验 → 带着错误信息重试**"循环需要的接口。
 
-### 3.4 Pipeline 与执行器（`nemo/pipeline.py`）
+### 3.4 Pipeline 与执行器（`huntian/pipeline.py`）
 
 **执行顺序由 manifest 推导**，而不是硬编码：若模块 A `produces` 的 artifact 是模块 B `requires` 的，A 必在 B 之前。槽位顺序只做平局裁决 —— 所以**换一个数据依赖不同的模块，不需要改 pipeline**。
 
@@ -278,7 +278,7 @@ Newton 用约 1/6 的迭代和约 **1/3** 的时间，落到同一位数上。
 一个插件就是一个目录，`__init__.py` 暴露两个名字：`MANIFEST` 和 `MODULE`。多文件插件可以用相对导入（`from .solver import ...`）。
 
 ```python
-from nemo.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
+from huntian.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
 
 MANIFEST = ModuleManifest(
     module_id="physics.mobility.my_model",       # 点分小写，至少两段
@@ -341,7 +341,7 @@ MODULE = MyMobility
 - **精确 Jacobian 的代价是装配变贵**：比旧的截断版贵约一个数量级（119 节点 0.6 → 5.1 ms，208 节点 1.3 → 16.5 ms），整解贵 1.5–1.7 倍；迭代数与线性求解次数不变。这笔钱是为 transport.dd 的误差预算付的，不是为了省迭代。将来若嫌贵，两条正路都已看清：(a) 三对角逆的**半可分（semiseparable）Green 函数两步扫描**可把装配降到 O(N) 次的向量化运算；(b) 耦合 Newton 的线性步改成**矩阵无关（matrix-free）Krylov**（`工作日志.md` §6-7），响应就只需对向量作用，即每个亚带一次三对角求解 O(N)，根本不必组装稠密矩阵。
 - **线性步仍是稠密的**（`nonlinear.newton` 用 `np.linalg.solve`）：它自己装不下 2 万节点的 DD。DD 因此**不走**这个服务，而是经 Deck 的 `linear` 槽解析 `linear.blocktridiag`（纯 numpy 块三对角直接解，O(nz·m³)）。把 `nonlinear.newton` 也迁到 `linear` 槽上仍是 `工作日志.md` §6-7 的欠账。
 - **Anderson 回退比 Newton 脆弱**：它更慢，而且在某些网格上会因密度钳制而卡住。默认算法是 Newton。
-- **材料常数未经 L2 独立验证**：`nemo/data/materials.json` 的数值转录自 Ambacher 2000/2002 与 Vurgaftman 2003，标记 `unverified`。`materials.dft`（`table` 后端）现已提供一个**带不确定度与完整溯源**的文献 DFT 覆盖通道（`data/dft_lookup/algan_gan.json` + `dft_provenance` 审计），但它是有意声明的 **0 K、理想晶体、文献转录**先验 —— 跑通 L2 基准（Hall 对比）之前**不要相信绝对数值**。
+- **材料常数未经 L2 独立验证**：`huntian/data/materials.json` 的数值转录自 Ambacher 2000/2002 与 Vurgaftman 2003，标记 `unverified`。`materials.dft`（`table` 后端）现已提供一个**带不确定度与完整溯源**的文献 DFT 覆盖通道（`data/dft_lookup/algan_gan.json` + `dft_provenance` 审计），但它是有意声明的 **0 K、理想晶体、文献转录**先验 —— 跑通 L2 基准（Hall 对比）之前**不要相信绝对数值**。
 - **屏蔽因子（screening）没有公认取值**，默认 0.8 只是起点，必须用 Hall 数据标定。
 - **有效质量近似**，忽略非抛物性、应变对质量的修正。
 - **势垒以上的态是有限域的盒子本征态，不是真正的束缚态**。它们是 3D 连续态的合法求积（面密度对域尺寸不敏感于 1e-5 以内），但**单个**波函数不是物理的。
@@ -360,8 +360,8 @@ MODULE = MyMobility
 ## 8. 目录结构
 
 ```
-NemoTCAD/
-├── python/nemo/
+Huntian/
+├── python/huntian/
 │   ├── schema.py          声明式 schema + 严格校验 + JSON Schema 输出
 │   ├── semver.py          零依赖语义化版本与范围匹配
 │   ├── events.py          同步事件总线

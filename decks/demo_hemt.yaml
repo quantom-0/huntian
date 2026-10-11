@@ -1,7 +1,7 @@
 # The same campaign as demo_hemt.json, in YAML.
 #
 # YAML support is optional: if PyYAML is not installed, load this file with
-# `nemo.deck.loads_deck(text, fmt="yaml")` only after installing it, or convert
+# `huntian.deck.loads_deck(text, fmt="yaml")` only after installing it, or convert
 # it to JSON. The JSON deck is the one that always runs.
 schema_version: "1.0"
 name: demo_algan_gan_hemt

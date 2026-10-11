@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import unittest
 
-from nemo import Executor, ModuleRegistry, Pipeline, ServiceRegistry, SimContext, load_deck
-from nemo.deck import SERVICE_SLOTS, SLOT_CAPABILITY, Deck
-from nemo.errors import ContextError, ModuleUnavailableError, ServiceUnavailableError
-from nemo.registry import ModuleCategory, ModuleState
+from huntian import Executor, ModuleRegistry, Pipeline, ServiceRegistry, SimContext, load_deck
+from huntian.deck import SERVICE_SLOTS, SLOT_CAPABILITY, Deck
+from huntian.errors import ContextError, ModuleUnavailableError, ServiceUnavailableError
+from huntian.registry import ModuleCategory, ModuleState
 
 from . import DECK_PATH, DECK_SP1D_PATH
 from .helpers import build_registry, builtin_materials

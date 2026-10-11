@@ -4,19 +4,19 @@ Examples
 --------
 List every registered plugin and its parameters::
 
-    python -m nemo.cli list-plugins --plugin-dir plugins
+    python -m huntian.cli list-plugins --plugin-dir plugins
 
 Validate a Deck without running it (the LLM repair-loop primitive)::
 
-    python -m nemo.cli validate decks/demo_hemt.json --plugin-dir plugins
+    python -m huntian.cli validate decks/demo_hemt.json --plugin-dir plugins
 
 Run a Deck and write reproducibility metadata::
 
-    python -m nemo.cli run decks/demo_hemt.json --plugin-dir plugins --metadata out/run.json
+    python -m huntian.cli run decks/demo_hemt.json --plugin-dir plugins --metadata out/run.json
 
 Emit the Deck JSON Schema (what an LLM is constrained against)::
 
-    python -m nemo.cli schema --what deck
+    python -m huntian.cli schema --what deck
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from typing import Iterable, Sequence
 
 from .context import SimContext
 from .deck import Deck, deck_json_schema, load_deck
-from .errors import NemoError, format_issues
+from .errors import HuntianError, format_issues
 from .materials import MaterialDB
 from .pipeline import Executor, Pipeline
 from .registry import ModuleRegistry
@@ -89,7 +89,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
     try:
         deck = load_deck(args.deck)
-    except NemoError as exc:
+    except HuntianError as exc:
         if args.json:
             print(json.dumps({"ok": False, "stage": "parse", "error": str(exc)}, indent=2))
         else:
@@ -133,7 +133,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     try:
         deck = load_deck(args.deck)
-    except NemoError as exc:
+    except HuntianError as exc:
         print(f"deck parse failed:\n{exc}", file=sys.stderr)
         return 2
 
@@ -202,7 +202,7 @@ def cmd_health(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     # Shared options live on a parent parser so they can be written *after* the
     # subcommand, which is the conventional CLI shape:
-    #     nemo run decks/demo_hemt.json --plugin-dir plugins
+    #     huntian run decks/demo_hemt.json --plugin-dir plugins
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
         "--plugin-dir",
@@ -214,8 +214,8 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--verbose", "-v", action="store_true", help="log discovery detail")
 
     parser = argparse.ArgumentParser(
-        prog="nemo",
-        description="NemoTCAD - lightweight modular TCAD core for GaN RF HEMTs",
+        prog="huntian",
+        description="Huntian - lightweight modular TCAD core for GaN RF HEMTs",
         parents=[common],
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -268,7 +268,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     try:
         return int(args.func(args))
-    except NemoError as exc:
+    except HuntianError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

@@ -1,4 +1,4 @@
-"""NemoTCAD - a lightweight, modular TCAD core for GaN RF HEMTs.
+"""Huntian - a lightweight, modular TCAD core for GaN RF HEMTs.
 
 The package is organised around three ideas:
 
@@ -11,7 +11,7 @@ The package is organised around three ideas:
 
 Typical use::
 
-    from nemo import ModuleRegistry, Executor, Pipeline, load_deck
+    from huntian import ModuleRegistry, Executor, Pipeline, load_deck
 
     registry = ModuleRegistry()
     registry.load_from_paths(["plugins"])
@@ -50,7 +50,7 @@ from .errors import (
     ModuleConfigError,
     ModuleLifecycleError,
     ModuleUnavailableError,
-    NemoError,
+    HuntianError,
     PipelineError,
     RegistryError,
     RequirementError,
@@ -95,7 +95,7 @@ __all__ = [
     "parse_version",
     "parse_requirement",
     # errors
-    "NemoError",
+    "HuntianError",
     "Issue",
     "format_issues",
     "SchemaError",

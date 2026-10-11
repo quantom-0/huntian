@@ -29,7 +29,7 @@ from typing import Any, Callable, Mapping
 
 import numpy as np
 
-from nemo.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
+from huntian.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
 
 from .solver import (
     JacobianCheck,
@@ -111,7 +111,7 @@ MANIFEST = ModuleManifest(
         ),
     ),
     verification="partially-verified",
-    author="NemoTCAD",
+    author="Huntian",
     tags=("solver", "newton", "nonlinear", "service"),
 )
 

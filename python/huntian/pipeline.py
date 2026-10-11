@@ -25,7 +25,7 @@ from .errors import (
     DependencyError,
     Issue,
     ModuleUnavailableError,
-    NemoError,
+    HuntianError,
     PipelineError,
     format_issues,
 )
@@ -36,7 +36,7 @@ from .services import ServiceRegistry
 
 __all__ = ["Stage", "Pipeline", "StageResult", "RunResult", "Executor"]
 
-LOGGER_NAME = "nemo"
+LOGGER_NAME = "huntian"
 
 
 @dataclass(frozen=True)
@@ -260,7 +260,7 @@ class Executor:
     """Runs pipelines against the registry and a simulation context.
 
     The executor also owns service wiring: it creates the context's
-    :class:`~nemo.services.ServiceRegistry` and configures every library module
+    :class:`~huntian.services.ServiceRegistry` and configures every library module
     the Deck binds (``nonlinear``, ``linear``, ``backend``). Service instances
     are cached on the context and are *not* torn down automatically - call
     ``ctx.services.release_all()`` when the context is done.
@@ -345,7 +345,7 @@ class Executor:
         # are probed individually and may simply be missing.
         try:
             plan = self.registry.resolve(pipeline.requirements(include_optional=False))
-        except NemoError as exc:
+        except HuntianError as exc:
             warnings.append(f"module resolution incomplete: {exc}")
             plan = None
         if plan is not None:
@@ -358,7 +358,7 @@ class Executor:
             try:
                 record = self.registry.select(stage.module_id, stage.version)
                 ctx.record_module_version(record.module_id, record.manifest.module_version)
-            except NemoError as exc:
+            except HuntianError as exc:
                 warnings.append(f"optional stage {stage.slot} is unavailable: {exc}")
 
         self._bus.publish(

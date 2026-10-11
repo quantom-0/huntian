@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from nemo.errors import RequirementError, VersionError
-from nemo.semver import Requirement, Version, VersionRange, parse_requirement
+from huntian.errors import RequirementError, VersionError
+from huntian.semver import Requirement, Version, VersionRange, parse_requirement
 
 
 class VersionTests(unittest.TestCase):

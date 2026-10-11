@@ -52,7 +52,7 @@ STRUCTURE = {
 
 def load_physics():
     """Import the physics module straight from the file."""
-    name = "nemo_tests_transport_dd_physics"
+    name = "huntian_tests_transport_dd_physics"
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, PHYSICS_PATH)
@@ -66,7 +66,7 @@ def load_physics():
 
 def load_package():
     """Import ``transport_dd`` as a package (its modules use relative imports)."""
-    name = "nemo_tests_transport_dd"
+    name = "huntian_tests_transport_dd"
     if name in sys.modules:
         return sys.modules[name]
     package = types.ModuleType(name)
@@ -325,10 +325,10 @@ class AssemblyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         load_package()
-        A = sys.modules["nemo_tests_transport_dd.assemble"]
+        A = sys.modules["huntian_tests_transport_dd.assemble"]
         cls.A = A
-        from nemo import SimContext
-        from nemo.materials import MaterialDB
+        from huntian import SimContext
+        from huntian.materials import MaterialDB
 
         registry = build_registry()
         module = registry.select("mesh.structured2d").module_cls()
@@ -347,7 +347,7 @@ class AssemblyTests(unittest.TestCase):
             delta_ec_ratio=0.7,
             gate_barrier_eV=0.94,
         )
-        from nemo.services import ServiceRegistry
+        from huntian.services import ServiceRegistry
 
         cls.linear = ServiceRegistry(registry).get_by_capability("linear")
 
@@ -464,9 +464,9 @@ class AssemblyTests(unittest.TestCase):
     def _equilibrium(self, vds_V: float = 0.0):
         """Solve from the Poisson start: equilibrium at 0 V, or a biased point."""
         A = self.A
-        from nemo.services import ServiceRegistry
+        from huntian.services import ServiceRegistry
 
-        newton = sys.modules["nemo_tests_transport_dd.newton"]
+        newton = sys.modules["huntian_tests_transport_dd.newton"]
         system = self._system()
         psi = system.poisson_start(linear=self.linear, tolerance=1.0e-11)
         system.adopt_equilibrium(psi)
@@ -494,7 +494,7 @@ class AssemblyTests(unittest.TestCase):
         # A small drain bias carried by continuation. The gate the plugin will
         # enforce is |Is + Id| / |Id| <= 1e-6, and the lateral current profile has
         # to be flat: the currents are the same at every vertical cut.
-        newton = sys.modules["nemo_tests_transport_dd.newton"]
+        newton = sys.modules["huntian_tests_transport_dd.newton"]
         system, outcome, _psi = self._equilibrium(0.0)
         state = np.array(outcome.x, dtype=float, copy=True)
         ramp = (self.grid.x_m - self.grid.x_m[0]) / (
@@ -534,10 +534,10 @@ SMALL_STRUCTURE = {
 
 def _small_context(*, transport_params: dict | None = None):
     """A context with every artefact transport.dd needs, on a small device."""
-    from nemo import SimContext
-    from nemo.deck import load_deck
-    from nemo.materials import MaterialDB
-    from nemo.services import ServiceRegistry
+    from huntian import SimContext
+    from huntian.deck import load_deck
+    from huntian.materials import MaterialDB
+    from huntian.services import ServiceRegistry
 
     registry = build_registry()
     mesh_module = registry.select("mesh.structured2d").module_cls()
@@ -565,7 +565,7 @@ class DeckIntegrationTests(unittest.TestCase):
     DECK = PLUGIN_DIR.parent / "decks" / "demo_hemt_dd.json"
 
     def test_demo_deck_binds_the_transport_stage_and_linear_service(self) -> None:
-        from nemo.deck import load_deck
+        from huntian.deck import load_deck
 
         deck = load_deck(self.DECK)
         self.assertEqual(deck.physics.transport.module, "transport.dd")
@@ -753,11 +753,11 @@ class PoissonManufacturedTests(unittest.TestCase):
     LAYER_NM = 200.0
 
     def _solve_on(self, spacing_nm: float):
-        from nemo import SimContext
-        from nemo.materials import MaterialDB
+        from huntian import SimContext
+        from huntian.materials import MaterialDB
 
         load_package()
-        A = sys.modules["nemo_tests_transport_dd.assemble"]
+        A = sys.modules["huntian_tests_transport_dd.assemble"]
         structure = {
             "name": "mms",
             "layers": [
@@ -913,12 +913,12 @@ class UniformResistorTests(unittest.TestCase):
     VDS = 0.05  # V
 
     def _resistor(self, vds_V: float = VDS):
-        from nemo import SimContext
-        from nemo.materials import MaterialDB
-        from nemo.services import ServiceRegistry
+        from huntian import SimContext
+        from huntian.materials import MaterialDB
+        from huntian.services import ServiceRegistry
 
-        A = sys.modules["nemo_tests_transport_dd.assemble"]
-        newton = sys.modules["nemo_tests_transport_dd.newton"]
+        A = sys.modules["huntian_tests_transport_dd.assemble"]
+        newton = sys.modules["huntian_tests_transport_dd.newton"]
 
         registry = build_registry()
         mesh_module = registry.select("mesh.structured2d").module_cls()

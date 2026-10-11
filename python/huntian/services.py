@@ -26,7 +26,7 @@ from .registry import IModule, ModuleRegistry
 
 __all__ = ["ServiceRegistry"]
 
-LOGGER_NAME = "nemo"
+LOGGER_NAME = "huntian"
 
 
 def _canonical(params: Mapping[str, Any] | None) -> str:

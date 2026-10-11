@@ -1,7 +1,7 @@
 # DFT 材料计算模块 —— 插件设计
 
 > 版本：v0.2（第一阶段 **table 后端已落地**；`qe_*` 后端未实现）
-> 定位：NemoTCAD 插件 `materials.dft`，为标记 `unverified` 的材料库提供一条**自主、可溯源、带不确定度**的第一性原理验证与替代通道
+> 定位：Huntian 插件 `materials.dft`，为标记 `unverified` 的材料库提供一条**自主、可溯源、带不确定度**的第一性原理验证与替代通道
 > 路线图：README §10 下一步**第 5 项**（第一阶段 ✅；第二阶段 `qe_local` + D0–D3 重算、第三阶段 `qe_slurm` + SQS 扫描 ⏳）
 > 架构前提：沿用 README §3 已验证的替换路径（`physics.quantum.sp1d` 模式）——物理模块一行不改；例外：Deck 需新增 `materials` 槽（见 §7 注）
 
@@ -39,12 +39,12 @@
 
 ### 1.2 与材料库的关系
 
-`nemo/data/materials.json` 的 `provenance.verification_status` 当前为 `unverified`。本模块的产出**不改变该文件**，而是：
+`huntian/data/materials.json` 的 `provenance.verification_status` 当前为 `unverified`。本模块的产出**不改变该文件**，而是：
 
 - 运行时把 DFT 计算结果作为**顶层覆盖层**合并进 `MaterialDB`（`MaterialDB.merge(override=True)` 机制已存在）；
 - 每个被覆盖的常数携带 `source = "DFT (functional, pseudopotential, date)"` 与独立的验证状态，下游溯源完整可见。
 
-这是"物理模型为形、数据可换可审"这一既有原则的延伸（见 `nemo/materials.py` 模块 docstring）。
+这是"物理模型为形、数据可换可审"这一既有原则的延伸（见 `huntian/materials.py` 模块 docstring）。
 
 ---
 
@@ -75,7 +75,7 @@ verification: partially-verified（上线时的自我声明；以 §8 基准通�
 
 ## 3. Manifest 定义（落地代码草稿）
 
-与 `nemo/registry.py` 实际签名一致；`ParamSpec` 的 `source` / `calibratable` 字段照常携带出处，供 LLM 层与拟合白名单消费。
+与 `huntian/registry.py` 实际签名一致；`ParamSpec` 的 `source` / `calibratable` 字段照常携带出处，供 LLM 层与拟合白名单消费。
 
 ```python
 MANIFEST = ModuleManifest(
@@ -92,7 +92,7 @@ MANIFEST = ModuleManifest(
     requires=("structure",),
     produces=("materials", "dft_provenance"),
     verification="partially-verified",
-    author="NemoTCAD",
+    author="Huntian",
     tags=("dft", "first-principles", "materials", "validation"),
     parameters=(
         # ---- 运行模式 ---------------------------------------------------

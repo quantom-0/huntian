@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from typing import Any
 
-from nemo.errors import (
+from huntian.errors import (
     DependencyError,
     DuplicateModuleError,
     ModuleConfigError,
@@ -14,7 +14,7 @@ from nemo.errors import (
     RegistryError,
     VersionConflictError,
 )
-from nemo.registry import (
+from huntian.registry import (
     BaseModule,
     ModuleCategory,
     ModuleManifest,
@@ -405,9 +405,9 @@ class DiscoveryTests(unittest.TestCase):
         import sys
 
         build_registry()
-        parents = [name for name in sys.modules if name.startswith("nemo_plugins")]
+        parents = [name for name in sys.modules if name.startswith("huntian_plugins")]
         self.assertTrue(parents, "expected synthetic plugin packages in sys.modules")
-        self.assertIn("nemo_plugins", sys.modules)
+        self.assertIn("huntian_plugins", sys.modules)
 
     def test_discovery_reports_broken_plugins_without_aborting(self) -> None:
         import tempfile
@@ -417,7 +417,7 @@ class DiscoveryTests(unittest.TestCase):
             root = Path(tmp)
             (root / "good").mkdir()
             (root / "good" / "__init__.py").write_text(
-                "from nemo.registry import BaseModule, ModuleManifest\n"
+                "from huntian.registry import BaseModule, ModuleManifest\n"
                 "MANIFEST = ModuleManifest(module_id='tmp.good', module_version='1.0.0')\n"
                 "class M(BaseModule):\n"
                 "    def execute(self, ctx):\n"

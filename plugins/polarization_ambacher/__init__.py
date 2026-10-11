@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from nemo.errors import Issue
-from nemo.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
+from huntian.errors import Issue
+from huntian.registry import BaseModule, ModuleCategory, ModuleManifest, ParamSpec
 
 ELEMENTARY_CHARGE = 1.602176634e-19  # C
 
@@ -38,7 +38,7 @@ MANIFEST = ModuleManifest(
     requires=("structure", "materials"),
     produces=("polarization",),
     verification="partially-verified",
-    author="NemoTCAD",
+    author="Huntian",
     tags=("polarization", "2deg", "iii-nitride"),
     parameters=(
         ParamSpec.float(
