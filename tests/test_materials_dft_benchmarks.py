@@ -24,7 +24,7 @@ from huntian import MaterialDB, SimContext
 from . import ROOT
 from .helpers import build_registry
 
-TABLE_PATH = ROOT / "data" / "dft_lookup" / "algan_gan.json"
+TABLE_PATH = ROOT / "python" / "huntian" / "plugins" / "materials_dft" / "data" / "algan_gan.json"
 GOLDEN_PATH = ROOT / "tests" / "golden" / "dft_benchmarks_d0_d3.json"
 
 #: Experimental references (design §8), independent of materials.json.

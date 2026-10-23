@@ -4,15 +4,15 @@ Examples
 --------
 List every registered plugin and its parameters::
 
-    python -m huntian.cli list-plugins --plugin-dir plugins
+    python -m huntian.cli list-plugins
 
 Validate a Deck without running it (the LLM repair-loop primitive)::
 
-    python -m huntian.cli validate decks/demo_hemt.json --plugin-dir plugins
+    python -m huntian.cli validate decks/demo_hemt.json
 
 Run a Deck and write reproducibility metadata::
 
-    python -m huntian.cli run decks/demo_hemt.json --plugin-dir plugins --metadata out/run.json
+    python -m huntian.cli run decks/demo_hemt.json --metadata out/run.json
 
 Emit the Deck JSON Schema (what an LLM is constrained against)::
 
@@ -28,6 +28,7 @@ import sys
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from . import bundled_plugins_dir
 from .context import SimContext
 from .deck import Deck, deck_json_schema, load_deck
 from .errors import HuntianError, format_issues
@@ -37,7 +38,7 @@ from .registry import ModuleRegistry
 
 __all__ = ["main", "build_registry", "DEFAULT_PLUGIN_DIRS"]
 
-DEFAULT_PLUGIN_DIRS = ("plugins",)
+DEFAULT_PLUGIN_DIRS = (str(bundled_plugins_dir()),)
 
 
 def build_registry(
@@ -202,7 +203,7 @@ def cmd_health(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     # Shared options live on a parent parser so they can be written *after* the
     # subcommand, which is the conventional CLI shape:
-    #     huntian run decks/demo_hemt.json --plugin-dir plugins
+    #     huntian run decks/demo_hemt.json
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
         "--plugin-dir",

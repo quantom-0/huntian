@@ -115,7 +115,7 @@
   ]
  },
  "run": {
-  "notes": "Same device as demo_hemt_sp1d.json. The materials slot is bound to materials.dft (backend=table, eg_policy=reject_pbe): the DFT lookup table overrides GaN/AlN constants, polarization.ambacher and physics.quantum.sp1d run untouched, and dft_provenance carries the full override audit trail. Run from the repository root so the default table_path (data/dft_lookup/algan_gan.json) resolves.",
+  "notes": "Same device as demo_hemt_sp1d.json. The materials slot is bound to materials.dft (backend=table, eg_policy=reject_pbe): the DFT lookup table overrides GaN/AlN constants, polarization.ambacher and physics.quantum.sp1d run untouched, and dft_provenance carries the full override audit trail. The default table_path (empty string) selects the lookup table bundled with the plugin, so it resolves from any working directory.",
   "tags": [
    "demo",
    "algan-gan",

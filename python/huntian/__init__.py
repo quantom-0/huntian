@@ -14,7 +14,7 @@ Typical use::
     from huntian import ModuleRegistry, Executor, Pipeline, load_deck
 
     registry = ModuleRegistry()
-    registry.load_from_paths(["plugins"])
+    registry.load_from_paths([bundled_plugins_dir()])
     deck = load_deck("decks/demo_hemt.json")
     result = Executor(registry).run(Pipeline.from_deck(deck), deck=deck)
 """
@@ -81,10 +81,23 @@ from .semver import Requirement, Version, VersionRange, parse_requirement, parse
 from .services import ServiceRegistry
 from .version import API_VERSION, SCHEMA_VERSION, __version__
 
+from pathlib import Path
+
+
+def bundled_plugins_dir() -> Path:
+    """Directory of the plugins bundled with this distribution.
+
+    The plugin loader scans this directory rather than importing it, so the
+    bundled plugins work from any working directory and after ``pip install``.
+    """
+    return Path(__file__).resolve().parent / "plugins"
+
+
 __all__ = [
     "__version__",
     "API_VERSION",
     "SCHEMA_VERSION",
+    "bundled_plugins_dir",
     # schema
     "Schema",
     "Field",

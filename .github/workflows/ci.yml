@@ -80,8 +80,8 @@ jobs:
 
       - name: Exercise the YAML Deck path
         run: |
-          python -m huntian.cli validate decks/demo_hemt.yaml --plugin-dir plugins
-          python -m huntian.cli run decks/demo_hemt.yaml --plugin-dir plugins --show ns
+          python -m huntian.cli validate decks/demo_hemt.yaml
+          python -m huntian.cli run decks/demo_hemt.yaml --show ns
 
       - name: Console script is on PATH
-        run: huntian list-plugins --plugin-dir plugins
+        run: huntian list-plugins

@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON_DIR = ROOT / "python"
-PLUGIN_DIR = ROOT / "plugins"
+PLUGIN_DIR = ROOT / "python" / "huntian" / "plugins"
 DECKS_DIR = ROOT / "decks"
 DECK_PATH = DECKS_DIR / "demo_hemt.json"
 DECK_SP1D_PATH = DECKS_DIR / "demo_hemt_sp1d.json"

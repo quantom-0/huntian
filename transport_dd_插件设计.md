@@ -282,7 +282,7 @@ T0–T4 全部通过前，`verification` 保持 `unverified`；IV 曲线一个�
 ## 9. 目录结构
 
 ```
-plugins/transport_dd/
+huntian/plugins/transport_dd/
 ├── __init__.py            # MANIFEST + MODULE
 ├── plugin.py              # TransportDD(BaseModule)：扫描循环、PTC 状态机、artifact 写出
 ├── assemble.py            # 网格遍历 → 残差/Jacobian 稀疏组装（FV + SG 通量）
@@ -333,13 +333,13 @@ plugins/transport_dd/
 
 ## 12. v0.1.2 实现偏差记录（落地后补写，不隐藏）
 
-实现已落地：`plugins/linear_blocktridiag/`（线性服务）、`plugins/transport_dd/{physics,assemble,newton,plugin}.py`、`tests/test_transport_dd.py`（25 项）、`decks/demo_hemt_dd.json`。本节记录**与设计稿不一致的地方**——设计稿在实现前写就，偏差是正常的，隐藏才不正常。
+实现已落地：`huntian/plugins/linear_blocktridiag/`（线性服务）、`huntian/plugins/transport_dd/{physics,assemble,newton,plugin}.py`、`tests/test_transport_dd.py`（25 项）、`decks/demo_hemt_dd.json`。本节记录**与设计稿不一致的地方**——设计稿在实现前写就，偏差是正常的，隐藏才不正常。
 
 ### 12.1 架构偏差
 
 | # | 设计稿 | 实际 | 原因 |
 |---|---|---|---|
-| D1 | §4/§9：线性步用 `scipy.sparse` | 新增 `plugins/linear_blocktridiag/`：纯 numpy 块三对角直接解（块 Thomas + LAPACK 块主元），经 Deck 的 `linear` 槽解析 | 部署环境只有 numpy，没有 SciPy。架构方向与设计一致（服务化 + 槽解析），实现换成不依赖 SciPy 的直接解 |
+| D1 | §4/§9：线性步用 `scipy.sparse` | 新增 `huntian/plugins/linear_blocktridiag/`：纯 numpy 块三对角直接解（块 Thomas + LAPACK 块主元），经 Deck 的 `linear` 槽解析 | 部署环境只有 numpy，没有 SciPy。架构方向与设计一致（服务化 + 槽解析），实现换成不依赖 SciPy 的直接解 |
 | D2 | §9：`physics.py` 含 Joyce-Dixon 统计 | 只实现 Boltzmann，`statistics` 只接受 `boltzmann`，其余**显式报错** | 简并修正必须同时改 SG 通量（广义 Einstein 关系）。只搬一半会静默不一致，宁可拒绝 |
 | D3 | §9：`physics.py` 含场依赖迁移率 | **已实现** Caughey-Thomas（`vsat_cm_s` / `beta_field`，默认启用），导数进 Jacobian 保持精确；`vsat_cm_s <= 0` 退回常数迁移率 | 初版按偏差记录为"不暴露"，收尾时补齐（见 §12.5） |
 | D4 | §5.4 `iv` 为提取器契约 | 契约一致（`vds_V`/`vgs_V`/`id_A_per_m`/`units`），另加 `points` 的逐点完整记录（收敛、迭代数、残差、连续性误差、门禁结果） | 门禁失败要能定位到具体偏置点，只给曲线不够用 |

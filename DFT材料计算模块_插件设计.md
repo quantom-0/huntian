@@ -9,8 +9,8 @@
 
 **已落地（2026-10-05，385 测试全绿）**：
 
-- `table` 后端完整实现：`plugins/materials_dft/`（`plugin.py` / `table_io.py` / `qe_driver.py` / `slurm.py`），qe_* 为惰性导入桩，table 模式第三方依赖为零（子进程级测试保证）；
-- 查找表资产 `data/dft_lookup/algan_gan.json`（v1.0.0）：GaN/AlN 端元共 10 项常数 + PBE 原始带隙，逐值标注文献出处与不确定度；**文献转录、非本所计算**，全部条目 `convergence: null`（诚实声明，不伪造收敛记录）；
+- `table` 后端完整实现：`huntian/plugins/materials_dft/`（`plugin.py` / `table_io.py` / `qe_driver.py` / `slurm.py`），qe_* 为惰性导入桩，table 模式第三方依赖为零（子进程级测试保证）；
+- 查找表资产 `huntian/plugins/materials_dft/data/algan_gan.json`（v1.0.0）：GaN/AlN 端元共 10 项常数 + PBE 原始带隙，逐值标注文献出处与不确定度；**文献转录、非本所计算**，全部条目 `convergence: null`（诚实声明，不伪造收敛记录）；
 - 精度红线全部在代码里：`eg_policy=reject_pbe` 默认硬拒绝（validate 返回 issue、阶段拒跑）；scissor 采用参考值并把修正量写入 `dft_eg_shift_eV`；数值设置与表记录不符默认拒绝（`stale-cache`），`allow_stale_cache=true` 才放行并写入 assumptions；无收敛记录的条目仅在显式 `override_policy` 下采用、逐行标注 `converged: false`；
 - `dft_provenance` artifact：backend/functional/numerics（含表内容哈希）/cache 计数/逐条目溯源/override_report/assumptions；
 - D0–D3 基准进 golden CI（`tests/golden/dft_benchmarks_d0_d3.json` 检出比对 + 容差带断言）；当前实测：晶格 ≤0.35%、弹性 ≤2.8%、极化 0%、带隙 ≤3.1%；
@@ -102,8 +102,8 @@ MANIFEST = ModuleManifest(
             doc="table: serve precomputed JSON; qe_*: drive Quantum ESPRESSO",
         ),
         ParamSpec.string(
-            "table_path", "data/dft_lookup/algan_gan.json",
-            doc="lookup-table path relative to the workspace root",
+            "table_path", "",
+            doc="lookup-table path; empty string selects the bundled table",
         ),
         # ---- 泛函与精度分级（红线见 §5）--------------------------------
         ParamSpec.choice(
@@ -259,7 +259,7 @@ dft_cache/<cache_key>.json   # 单点结果 + numerics + convergence record
 ```
 
 - `allow_stale_cache=False`（默认）：缓存键不匹配即重算或报错（table 模式下报错并提示重算路径）——**数值设置不同而结果"碰巧在库里"是最危险的复用**。
-- 查找表 `data/dft_lookup/*.json` 本身视为**版本化数据资产**：进入 golden CI（方案 §11.3），表内容变更触发回归。
+- 查找表（随插件分发的 `huntian/plugins/materials_dft/data/*.json`）本身视为**版本化数据资产**：进入 golden CI（方案 §11.3），表内容变更触发回归。
 
 ---
 
@@ -303,7 +303,7 @@ DFT 模块验证的是**它与实验/文献的一致性**，不替代 L0–L2（
 ## 9. 目录结构
 
 ```
-plugins/materials_dft/
+huntian/plugins/materials_dft/
 ├── __init__.py           # MANIFEST + MODULE（入口）
 ├── plugin.py             # DftMaterials(BaseModule)：生命周期 / 缓存 / 合并
 ├── table_io.py           # 查找表读写与结构校验

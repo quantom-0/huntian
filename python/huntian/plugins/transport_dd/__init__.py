@@ -10,7 +10,7 @@ Deviations from ``transport_dd_插件设计.md`` v0.1.1, recorded rather than hi
 -------------------------------------------------------------------------------
 1. **No SciPy.** The design bound the sparse linear step to ``scipy.sparse``.
    The deployment target has NumPy only, so the linear step is a block
-   tridiagonal direct solve written here (``plugins/linear_blocktridiag``) and
+   tridiagonal direct solve written here (``linear.blocktridiag``) and
    resolved through the Deck's ``linear`` slot, which is what the design wanted
    architecturally anyway.
 2. **Boltzmann statistics only.** The design defaulted to a Joyce-Dixon

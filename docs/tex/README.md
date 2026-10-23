@@ -1,7 +1,7 @@
 # Huntian 模块化技术文档（LaTeX 源）
 
 > 本目录是《Huntian：GaN 射频 HEMT 轻量化 TCAD 内核 —— 模块化技术文档》的
-> LaTeX 源码。**一个插件对应一个模块章**，架构与代码仓库 `plugins/` 同构。
+> LaTeX 源码。**一个插件对应一个模块章**，架构与代码仓库 `huntian/plugins/` 同构。
 
 ---
 

@@ -57,7 +57,14 @@ package-dir = { "" = "python" }
 where = ["python"]
 
 [tool.setuptools.package-data]
-huntian = ["data/*.json"]
+huntian = [
+  "data/*.json",
+  # Bundled plugins ship as data: the loader scans `huntian/plugins/` (a plain
+  # directory, not a package), so each plugin `.py` and the materials.dft
+  # lookup table must be listed explicitly.
+  "plugins/*/*.py",
+  "plugins/*/data/*.json",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

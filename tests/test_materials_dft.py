@@ -9,6 +9,7 @@ settings are numerical-method choices, not device fit knobs.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -22,7 +23,7 @@ from . import ROOT
 from .dft_table_fixtures import MINIMAL_TABLE
 from .helpers import build_registry
 
-TABLE_PATH = ROOT / "data" / "dft_lookup" / "algan_gan.json"
+TABLE_PATH = ROOT / "python" / "huntian" / "plugins" / "materials_dft" / "data" / "algan_gan.json"
 
 
 def make_context() -> SimContext:
@@ -64,6 +65,10 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(self.manifest.param("eg_policy").default, "reject_pbe")
         self.assertEqual(self.manifest.param("functional").default, "hse06")
 
+    def test_default_table_path_selects_the_bundled_table(self) -> None:
+        # Empty string is the "bundled table" sentinel, not a filesystem path.
+        self.assertEqual(self.manifest.param("table_path").default, "")
+
     def test_qe_drivers_are_not_imported_in_table_mode(self) -> None:
         # Lazy imports are a hard requirement: discovery loads every plugin,
         # and loading this one must not pull ase/qe_driver/slurm in. Run in a
@@ -71,7 +76,7 @@ class ManifestTests(unittest.TestCase):
         code = (
             "import sys; sys.path.insert(0, 'python')"
             "; from huntian.registry import discover_plugin_classes"
-            "; discover_plugin_classes(['plugins/materials_dft'])"
+            "; discover_plugin_classes(['python/huntian/plugins/materials_dft'])"
             "; leaked=[m for m in sys.modules if 'qe_driver' in m"
             " or 'slurm' in m or m == 'ase']"
             "; print('LEAKED', leaked)"
@@ -84,6 +89,53 @@ class ManifestTests(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, msg=proc.stderr)
         self.assertIn("LEAKED []", proc.stdout, msg=proc.stdout + proc.stderr)
+
+
+class BundledTableResolutionTests(unittest.TestCase):
+    """The default table must resolve from any working directory.
+
+    Regression for the pre-PyPI blocker: ``table_path`` used to default to a
+    path resolved against ``Path.cwd()``, so running from anywhere but the
+    repository root raised ``ModuleConfigError: lookup table not found``.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.registry = build_registry()
+
+    def test_default_table_path_resolves_independently_of_cwd(self) -> None:
+        module_cls = self.registry.select("materials.dft").module_cls
+        module = module_cls()
+        bundled = ROOT / "python" / "huntian" / "plugins" / "materials_dft" / "data" / "algan_gan.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.getcwd()
+            try:
+                os.chdir(tmp)
+                # No table_path supplied: the empty default must select the
+                # bundled table, not resolve against the (wrong) working dir.
+                module.initialize({})
+                self.assertEqual(module._table_path.resolve(), bundled.resolve())
+                self.assertTrue(module._table_path.is_file())
+            finally:
+                os.chdir(old)
+        module.terminate()
+
+    def test_explicit_relative_path_still_resolves_against_cwd(self) -> None:
+        # Backward compatibility: a non-empty table_path keeps the old
+        # "relative to the current working directory" semantics.
+        module_cls = self.registry.select("materials.dft").module_cls
+        module = module_cls()
+        with tempfile.TemporaryDirectory() as tmp:
+            table = Path(tmp) / "table.json"
+            table.write_text(json.dumps(MINIMAL_TABLE), encoding="utf-8")
+            old = os.getcwd()
+            try:
+                os.chdir(tmp)
+                module.initialize({"table_path": "table.json"})
+                self.assertEqual(module._table_path.resolve(), table.resolve())
+            finally:
+                os.chdir(old)
+        module.terminate()
 
 
 class RedLineTests(unittest.TestCase):

@@ -41,9 +41,9 @@ python demo.py
 
 # 命令行
 $env:PYTHONPATH = "python"
-python -m huntian.cli list-plugins --plugin-dir plugins
-python -m huntian.cli validate decks/demo_hemt.json --plugin-dir plugins
-python -m huntian.cli run decks/demo_hemt_sp1d.json --plugin-dir plugins --show ns
+python -m huntian.cli list-plugins
+python -m huntian.cli validate decks/demo_hemt.json
+python -m huntian.cli run decks/demo_hemt_sp1d.json --show ns
 python -m huntian.cli schema --what deck      # 给 LLM 用的 JSON Schema
 ```
 
@@ -56,7 +56,7 @@ JSON Deck 在**任何环境**都能跑，YAML 只是便利。
 
 ### 3.1 模块注册中心（`huntian/registry.py`）
 
-- **发现**：扫描 `plugins/` 目录（支持**多文件插件包**，`__init__.py` 可用相对导入）或按点分导入路径加载；单个插件损坏**不会**中断整轮发现。
+- **发现**：扫描随包分发的插件目录（`huntian/plugins/`，默认 `--plugin-dir` 指向这里，支持**多文件插件包**，`__init__.py` 可用相对导入）或按点分导入路径加载；单个插件损坏**不会**中断整轮发现。
 - **契约校验**：插件的 `api_version` 主版本不匹配时拒绝加载。
 - **多版本共存**：同一 `module_id` 可同时注册多个版本，旧结果永远可复现。
 - **依赖解析**：`>=1.0,<2.0`、`^1.2.3`、`~1.2`、`a|b`、逗号 AND；拓扑排序 + 环检测 + 版本冲突检测。
@@ -159,7 +159,7 @@ P1 的另一半：极化/量子回答"电荷从哪来"，`transport.dd` 回答"�
 内置材料库的常数转录自文献，标记 `unverified`。`materials.dft` 提供一条**带不确定度与完整溯源**的第一性原理覆盖通道：
 
 - **drop-in 替换 `materials` 槽**：加载内置库 → 叠加 DFT 常数 → 重新发布 `materials` artifact，`physics.polarization.ambacher` 与 `physics.quantum.sp1d` **一行未改**；
-- **三种后端共用同一 artifact 契约**：`table`（默认，零第三方依赖，读 `data/dft_lookup/algan_gan.json`）/ `qe_local` / `qe_slurm`（后两者惰性导入 ASE + Quantum ESPRESSO，**本阶段未实现**）；
+- **三种后端共用同一 artifact 契约**：`table`（默认，零第三方依赖，读随插件分发的 `data/algan_gan.json`，默认 `table_path` 为空串、与当前工作目录无关）/ `qe_local` / `qe_slurm`（后两者惰性导入 ASE + Quantum ESPRESSO，**本阶段未实现**）；
 - **精度红线写进代码而不是文档**：`eg_policy=reject_pbe`（PBE 带隙系统性偏低，绝不允许直接喂给器件模型，除非显式 `scissor_to_reference` 并记录平移量）；`ecut`/`kspacing` 与表记录不符即视为 **stale**，`allow_stale_cache=False` 时明确报错而非静默使用；无收敛证据的条目标 `converged=false`；
 - **产出 `dft_provenance`** 审计 artifact，逐条记录来源、泛函、赝势、精度设置与不确定度；`override_policy` 三态（`dft_wins` / `reference_wins` / `dft_only_gapless`）决定合并方向。
 
@@ -309,7 +309,7 @@ class MyMobility(BaseModule):
 MODULE = MyMobility
 ```
 
-丢进 `plugins/` 即可，**不需要修改任何其他文件**。
+丢进插件目录（默认 `huntian/plugins/`）即可，**不需要修改任何其他文件**。
 
 ---
 
@@ -347,8 +347,7 @@ MODULE = MyMobility
 - **精确 Jacobian 的代价是装配变贵**：比旧的截断版贵约一个数量级（119 节点 0.6 → 5.1 ms，208 节点 1.3 → 16.5 ms），整解贵 1.5–1.7 倍；迭代数与线性求解次数不变。这笔钱是为 transport.dd 的误差预算付的，不是为了省迭代。将来若嫌贵，两条正路都已看清：(a) 三对角逆的**半可分（semiseparable）Green 函数两步扫描**可把装配降到 O(N) 次的向量化运算；(b) 耦合 Newton 的线性步改成**矩阵无关（matrix-free）Krylov**（`工作日志.md` §6-7），响应就只需对向量作用，即每个亚带一次三对角求解 O(N)，根本不必组装稠密矩阵。
 - **线性步仍是稠密的**（`nonlinear.newton` 用 `np.linalg.solve`）：它自己装不下 2 万节点的 DD。DD 因此**不走**这个服务，而是经 Deck 的 `linear` 槽解析 `linear.blocktridiag`（纯 numpy 块三对角直接解，O(nz·m³)）。把 `nonlinear.newton` 也迁到 `linear` 槽上仍是 `工作日志.md` §6-7 的欠账。
 - **Anderson 回退比 Newton 脆弱**：它更慢，而且在某些网格上会因密度钳制而卡住。默认算法是 Newton。
-- **材料常数未经 L2 独立验证**：`huntian/data/materials.json` 的数值转录自 Ambacher 2000/2002 与 Vurgaftman 2003，标记 `unverified`。`materials.dft`（`table` 后端）现已提供一个**带不确定度与完整溯源**的文献 DFT 覆盖通道（`data/dft_lookup/algan_gan.json` + `dft_provenance` 审计），但它是有意声明的 **0 K、理想晶体、文献转录**先验 —— 跑通 L2 基准（Hall 对比）之前**不要相信绝对数值**。
-- **`materials.dft` 的默认表路径是相对当前工作目录的**：`table_path` 默认 `data/dft_lookup/algan_gan.json`。在仓库根运行时正常，从别处运行（例如 `pip install` 之后）会报 `ModuleConfigError: lookup table not found` —— 已实测确认。再者 `plugins/` 不在 `python/` 包内，安装后不随发行版分发，该查找表也不在任何 wheel / sdist 里。**PyPI 发布前必须一并解决**（改用 `importlib.resources` 定位，或让表随插件目录一起分发）。
+- **材料常数未经 L2 独立验证**：`huntian/data/materials.json` 的数值转录自 Ambacher 2000/2002 与 Vurgaftman 2003，标记 `unverified`。`materials.dft`（`table` 后端）现已提供一个**带不确定度与完整溯源**的文献 DFT 覆盖通道（随插件分发的 `data/algan_gan.json` + `dft_provenance` 审计），但它是有意声明的 **0 K、理想晶体、文献转录**先验 —— 跑通 L2 基准（Hall 对比）之前**不要相信绝对数值**。
 - **屏蔽因子（screening）没有公认取值**，默认 0.8 只是起点，必须用 Hall 数据标定。
 - **有效质量近似**，忽略非抛物性、应变对质量的修正。
 - **势垒以上的态是有限域的盒子本征态，不是真正的束缚态**。它们是 3D 连续态的合法求积（面密度对域尺寸不敏感于 1e-5 以内），但**单个**波函数不是物理的。
@@ -379,35 +378,34 @@ Huntian/
 │   ├── deck.py            Deck schema / 解析 / 两级校验 / 服务槽
 │   ├── pipeline.py        Pipeline 装配 + Executor + 服务装配
 │   ├── cli.py             命令行入口
-│   └── data/materials.json
-├── plugins/
-│   ├── mesh_structured2d/
-│   ├── polarization_ambacher/
-│   ├── quantum_analytic_tw/      基线：解析三角阱
-│   ├── quantum_sp1d/             自洽 Schrödinger–Poisson（多文件插件包）
-│   │   ├── __init__.py           插件入口（MANIFEST + MODULE）
-│   │   └── solver.py             纯数值：面基网格 / PoissonOperator / 精确 Jacobian / 驱动
-│   ├── nonlinear_newton/         Newton 服务模块（多文件插件包）
-│   │   ├── __init__.py           插件入口，暴露 solve() / verify_jacobian()
-│   │   └── solver.py             通用稠密 Newton + 线搜索 + PTC + Jacobian 校验
-│   ├── linear_blocktridiag/      linear 服务：纯 numpy 块三对角直接解
-│   │   ├── __init__.py
-│   │   └── solver.py
-│   ├── transport_dd/             漂移扩散输运（多文件插件包）
-│   │   ├── __init__.py           插件入口（MANIFEST + MODULE）
-│   │   ├── plugin.py             扫描循环 / PTC 状态机 / artifact 写出
-│   │   ├── physics.py            统计（Boltzmann/Joyce-Dixon）、场依赖迁移率、边界条件
-│   │   ├── assemble.py           残差 / 块三对角 Jacobian 组装（FV + SG 通量）
-│   │   └── newton.py             阻尼 Newton + 线搜索 + PTC
-│   ├── materials_dft/            第一性原理材料库（多文件插件包，table 后端零依赖）
-│   │   ├── __init__.py           插件入口（MANIFEST + MODULE）
-│   │   ├── plugin.py             生命周期 / 精度红线 / 覆盖合并 / dft_provenance
-│   │   ├── table_io.py           查找表读写、结构校验、stale 检测
-│   │   ├── qe_driver.py          ASE/Quantum ESPRESSO 驱动（惰性导入，未实现）
-│   │   └── slurm.py              集群作业（惰性导入，未实现）
-│   └── extract_fom/
-├── data/
-│   └── dft_lookup/algan_gan.json 文献 DFT 查找表（版本化数据资产，进 golden CI）
+│   ├── data/materials.json
+│   └── plugins/                       随包分发的插件（扫描加载，非 import）
+│       ├── mesh_structured2d/
+│       ├── polarization_ambacher/
+│       ├── quantum_analytic_tw/      基线：解析三角阱
+│       ├── quantum_sp1d/             自洽 Schrödinger–Poisson（多文件插件包）
+│       │   ├── __init__.py           插件入口（MANIFEST + MODULE）
+│       │   └── solver.py             纯数值：面基网格 / PoissonOperator / 精确 Jacobian / 驱动
+│       ├── nonlinear_newton/         Newton 服务模块（多文件插件包）
+│       │   ├── __init__.py           插件入口，暴露 solve() / verify_jacobian()
+│       │   └── solver.py             通用稠密 Newton + 线搜索 + PTC + Jacobian 校验
+│       ├── linear_blocktridiag/      linear 服务：纯 numpy 块三对角直接解
+│       │   ├── __init__.py
+│       │   └── solver.py
+│       ├── transport_dd/             漂移扩散输运（多文件插件包）
+│       │   ├── __init__.py           插件入口（MANIFEST + MODULE）
+│       │   ├── plugin.py             扫描循环 / PTC 状态机 / artifact 写出
+│       │   ├── physics.py            统计（Boltzmann/Joyce-Dixon）、场依赖迁移率、边界条件
+│       │   ├── assemble.py           残差 / 块三对角 Jacobian 组装（FV + SG 通量）
+│       │   └── newton.py             阻尼 Newton + 线搜索 + PTC
+│       ├── materials_dft/            第一性原理材料库（多文件插件包，table 后端零依赖）
+│       │   ├── __init__.py           插件入口（MANIFEST + MODULE）
+│       │   ├── plugin.py             生命周期 / 精度红线 / 覆盖合并 / dft_provenance
+│       │   ├── table_io.py           查找表读写、结构校验、stale 检测
+│       │   ├── qe_driver.py          ASE/Quantum ESPRESSO 驱动（惰性导入，未实现）
+│       │   ├── slurm.py              集群作业（惰性导入，未实现）
+│       │   └── data/algan_gan.json   文献 DFT 查找表（版本化数据资产，随插件分发，进 golden CI）
+│       └── extract_fom/
 ├── decks/
 │   ├── demo_hemt.json            解析量子模型
 │   ├── demo_hemt_sp1d.json       同一器件：自洽 SP + Newton（改了一行绑定 + 服务槽）
@@ -465,7 +463,7 @@ python run_tests.py    ->  426 tests, 0 failures, 0 errors   (~18 s)
 按优先级排列；标 📝 的已有独立设计稿（见 §11）：
 
 1. ✅ **把 Jacobian 做到严格精确（已完成）** —— 波函数响应的态求和的**不再截断**：用秩-1 Woodbury/Sherman–Morrison 正则化 + 固定规范的三对角消元得到 `(A−Eᵢ)†`，块右端 Thomas 一次分解求 N 列，代价 O(N²)/亚带（替代全谱本征矢求和的 O(N³)）；顺带发现并补上了**态密度质量响应**这一缺项。结果：对中心差分 ~1e-11、与模块内全谱参考实现一致到 4e-13、耦合 Newton 局部阶 **1.99**。代价（装配贵一个数量级、整解 1.5–1.7 倍）与两条后续提速路线已写进 §7。
-2. ✅ **`transport.dd`（已完成）** 📝 —— 漂移扩散 + 连续性方程，把平衡态求解扩展成带偏压求解。落地：`linear.blocktridiag` 服务（纯 numpy 块三对角直接解，替代环境里缺失的 SciPy）+ `plugins/transport_dd/`（physics/assemble/newton/plugin）+ `decks/demo_hemt_dd.json`（端到端 `status: success`）+ 31 项测试。实测：T0 均匀电阻闭式解相对误差 < 1e-6、T2 MMS 观测阶 2.008/2.002/2.001、平衡态端点电流 2.7e-15 A/m、Vds ≤ 1 V 连续性 1e-12 或更好、耦合 Jacobian 沿路径 ~1e-10、Caughey–Thomas 迁移率带来电流饱和。**局限**：Vds ≥ 2 V 的 Newton 收敛、T1 与 1D SP 的带边对比（界面抹平）、2DEG 面密度比极化上限高约 1.7 倍，均在 `transport_dd_插件设计.md` §12 中说明。
+2. ✅ **`transport.dd`（已完成）** 📝 —— 漂移扩散 + 连续性方程，把平衡态求解扩展成带偏压求解。落地：`linear.blocktridiag` 服务（纯 numpy 块三对角直接解，替代环境里缺失的 SciPy）+ `huntian/plugins/transport_dd/`（physics/assemble/newton/plugin）+ `decks/demo_hemt_dd.json`（端到端 `status: success`）+ 31 项测试。实测：T0 均匀电阻闭式解相对误差 < 1e-6、T2 MMS 观测阶 2.008/2.002/2.001、平衡态端点电流 2.7e-15 A/m、Vds ≤ 1 V 连续性 1e-12 或更好、耦合 Jacobian 沿路径 ~1e-10、Caughey–Thomas 迁移率带来电流饱和。**局限**：Vds ≥ 2 V 的 Newton 收敛、T1 与 1D SP 的带边对比（界面抹平）、2DEG 面密度比极化上限高约 1.7 倍，均在 `transport_dd_插件设计.md` §12 中说明。
 3. **L2 基准 + golden CI** —— 用 Hall 测量对比 n_s，把测试套件接入回归门禁。
 4. **陷阱与自热** —— 电流坍塌、gate/drain-lag、晶格温度（P3）。
 5. ✅ **`materials.dft` 第一阶段（`table` 后端，已完成）** —— 插件落地：文献 DFT 查找表 + 覆盖合并 + `dft_provenance` 审计 + 精度红线（`reject_pbe` / scissor / stale 拒绝 / `converged` 标记）+ D0–D3 golden 基准 + Deck 一行替换验收（`decks/demo_hemt_dft.json`）。**第二阶段（`qe_local` 驱动 + 重算表格 + 真收敛记录）与第三阶段（`qe_slurm` + SQS 合金扫描，D4）未开工**，见 `工作日志.md` §6。设计稿 `DFT材料计算模块_插件设计.md`。

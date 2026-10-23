@@ -1,7 +1,7 @@
 % module_id: transport.dd
 % module_version: 0.1.0
-% plugin_dir: plugins/transport_dd
-% source_files: plugins/transport_dd/{__init__,plugin,physics,assemble,newton}.py
+% plugin_dir: huntian/plugins/transport_dd
+% source_files: huntian/plugins/transport_dd/{__init__,plugin,physics,assemble,newton}.py
 % tests: tests/test_transport_dd.py
 
 \chapter{稳态漂移扩散输运}
@@ -35,7 +35,7 @@ $O(10^{4})$ 倍，Jacobian 是块三对角的，求解过程需要三层递进�
   \cardrow{依赖 artifact}{mesh, structure, materials, polarization}
   \cardrow{产出 artifact}{electrostatics, carriers, current, iv}
   \cardrow{验证状态}{partially-verified}
-  \cardrow{源码}{\fpath{plugins/transport_dd/}（多文件插件包）}
+  \cardrow{源码}{\fpath{huntian/plugins/transport_dd/}（多文件插件包）}
   \cardrow{测试}{\fpath{tests/test_transport_dd.py}}
   \cardrow{可标定参数}{\akey{temperature_K}\calib、\akey{mu0_cm2_Vs}\calib、
     \akey{vsat_cm_s}\calib、\akey{delta_ec_ratio}\calib}

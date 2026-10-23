@@ -30,7 +30,7 @@ import unittest
 
 import numpy as np
 
-from . import PLUGIN_DIR
+from . import PLUGIN_DIR, ROOT
 from .helpers import build_registry
 
 PHYSICS_PATH = PLUGIN_DIR / "transport_dd" / "physics.py"
@@ -562,7 +562,7 @@ def _small_context(*, transport_params: dict | None = None):
 class DeckIntegrationTests(unittest.TestCase):
     """The demo deck, the service binding, and one end-to-end plugin run."""
 
-    DECK = PLUGIN_DIR.parent / "decks" / "demo_hemt_dd.json"
+    DECK = ROOT / "decks" / "demo_hemt_dd.json"
 
     def test_demo_deck_binds_the_transport_stage_and_linear_service(self) -> None:
         from huntian.deck import load_deck

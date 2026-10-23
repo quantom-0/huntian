@@ -1,7 +1,7 @@
 % module_id: materials.dft
 % module_version: 0.1.0
-% plugin_dir: plugins/materials_dft
-% source_files: plugins/materials_dft/{__init__,plugin,table_io,qe_driver,slurm}.py
+% plugin_dir: huntian/plugins/materials_dft
+% source_files: huntian/plugins/materials_dft/{__init__,plugin,table_io,qe_driver,slurm}.py
 % tests: tests/test_materials_dft.py, tests/test_materials_dft_table.py,
 %        tests/test_materials_dft_overrides.py, tests/test_materials_dft_benchmarks.py,
 %        tests/test_hotswap_materials.py
@@ -33,7 +33,7 @@
   \cardrow{依赖 artifact}{structure}
   \cardrow{产出 artifact}{materials, dft\_provenance}
   \cardrow{验证状态}{partially-verified}
-  \cardrow{源码}{\fpath{plugins/materials_dft/}（多文件插件包）}
+  \cardrow{源码}{\fpath{huntian/plugins/materials_dft/}（多文件插件包）}
   \cardrow{测试}{\fpath{tests/test_materials_dft*.py} 等五份（含 D0--D3 基准与替换验收）}
   \cardsep
   \cardrow{可标定参数}{\textbf{无}（见下）}
@@ -98,7 +98,7 @@ $1.72$\U{eV}，而实验值为 $3.42$\U{eV} —— 偏低约 $1.7$\U{eV}，
         \textbf{绝不静默使用}。
 \end{enumerate}
 
-第 3 条在本仓库的查找表上有一个诚实的后果：\fpath{data/dft_lookup/algan_gan.json}
+第 3 条在本仓库的查找表上有一个诚实的后果：\fpath{huntian/plugins/materials_dft/data/algan_gan.json}
 中的\emph{全部}条目都是 \akey{convergence: null}，因为逐篇文献的两点收敛
 设置大多未以可提取的形式发表。查找表自己的 \akey{honesty_note} 写明：
 所引不确定度区间\emph{跨越了已发表计算的散布}，它是文献收敛性的

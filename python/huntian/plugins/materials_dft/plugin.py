@@ -39,6 +39,12 @@ from .table_io import (
     numerics_mismatch,
 )
 
+#: Lookup table bundled with this plugin. Resolved relative to this file
+#: (``__file__`` is always absolute under the plugin loader, unlike the
+#: synthetic package's ``submodule_search_locations``), so the default table
+#: works from any working directory - including after ``pip install``.
+_BUNDLED_TABLE = Path(__file__).resolve().parent / "data" / "algan_gan.json"
+
 #: Properties the DFT layer is allowed to override, excluding the gap (which
 #: is governed by the eg_policy red line).
 _NON_GAP_KEYS: tuple[str, ...] = tuple(k for k in OVERRIDABLE_KEYS if k != "Eg_eV")
@@ -68,7 +74,7 @@ class DftMaterials(BaseModule):
         if backend == "table":
             # Resolve now so a missing table fails at initialize time with a
             # clear message instead of mid-run.
-            self._table_path = self._resolve_path(str(self.param("table_path")))
+            self._table_path = self._resolve_table_path(str(self.param("table_path")))
             if not self._table_path.is_file():
                 raise ModuleConfigError(
                     f"{self.module_id}: lookup table not found: {self._table_path} "
@@ -374,6 +380,20 @@ class DftMaterials(BaseModule):
         except TableError as exc:
             issues.append(Issue("params.table_path", str(exc), "table-unavailable"))
             return None
+
+    @staticmethod
+    def _resolve_table_path(raw: str) -> Path:
+        """Resolve the ``table_path`` parameter.
+
+        An empty string selects the table bundled with this plugin (resolved
+        relative to this file, independent of the working directory); any
+        other value is treated as a filesystem path (absolute, or relative to
+        the current working directory).
+        """
+        if raw == "":
+            return _BUNDLED_TABLE
+        path = Path(raw)
+        return path if path.is_absolute() else Path.cwd() / path
 
     @staticmethod
     def _resolve_path(raw: str) -> Path:

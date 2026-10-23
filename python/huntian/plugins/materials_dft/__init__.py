@@ -51,8 +51,11 @@ MANIFEST = ModuleManifest(
         ),
         ParamSpec.string(
             "table_path",
-            "data/dft_lookup/algan_gan.json",
-            doc="lookup-table path relative to the working directory",
+            "",
+            doc="lookup-table path; empty string selects the table bundled with "
+            "this plugin (data/algan_gan.json), any other value is resolved as a "
+            "filesystem path (absolute, or relative to the current working "
+            "directory)",
         ),
         # ---- functional & accuracy tiers (red lines in plugin.py) --------
         ParamSpec.choice(

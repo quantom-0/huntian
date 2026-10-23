@@ -42,7 +42,7 @@ from huntian import (  # noqa: E402
 
 DECK_PATH = ROOT / "decks" / "demo_hemt.json"
 SP_DECK_PATH = ROOT / "decks" / "demo_hemt_sp1d.json"
-PLUGIN_DIR = ROOT / "plugins"
+PLUGIN_DIR = ROOT / "python" / "huntian" / "plugins"
 WIDTH = 78
 
 

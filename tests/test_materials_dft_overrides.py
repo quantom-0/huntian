@@ -19,7 +19,7 @@ from . import ROOT
 from .dft_table_fixtures import MINIMAL_TABLE
 from .helpers import build_registry
 
-TABLE_PATH = ROOT / "data" / "dft_lookup" / "algan_gan.json"
+TABLE_PATH = ROOT / "python" / "huntian" / "plugins" / "materials_dft" / "data" / "algan_gan.json"
 
 
 def make_context() -> SimContext:
